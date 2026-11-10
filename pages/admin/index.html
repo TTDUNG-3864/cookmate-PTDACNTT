@@ -130,12 +130,17 @@
       
       <!-- Admin Header -->
       <header class="admin-header">
-        <h1 class="admin-header__title">Bảng điều khiển Quản trị</h1>
+        <h1 class="admin-header__title">
+          <span class="title-full">Bảng điều khiển Quản trị</span>
+          <span class="title-compact">Quản trị</span>
+        </h1>
         <div class="admin-header__actions">
-          <a href="recipe-form.html" class="btn btn-primary btn-sm">
-            <i class="fa-solid fa-plus"></i> Đăng món mới (Admin)
+          <a href="recipe-form.html" class="btn btn-primary btn-sm btn-admin-post" aria-label="Đăng món mới">
+            <i class="fa-solid fa-plus"></i>
+            <span class="btn-text-full">Đăng món mới (Admin)</span>
+            <span class="btn-text-mobile">Đăng món mới</span>
           </a>
-          <button class="btn btn-ghost btn-sm" onclick="handleLogout()" title="Đăng xuất">
+          <button class="btn btn-ghost btn-sm" onclick="handleLogout()" title="Đăng xuất" aria-label="Đăng xuất">
             <i class="fa-solid fa-right-from-bracket"></i>
           </button>
         </div>

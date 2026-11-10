@@ -492,6 +492,8 @@
         var currentActions = document.querySelector('.admin-header__actions');
         if (newActions && currentActions) {
           currentActions.innerHTML = newActions.innerHTML;
+        } else if (!newActions && currentActions) {
+          currentActions.innerHTML = '';
         }
 
         // 3. Cập nhật Vùng nội dung chính (.admin-content)

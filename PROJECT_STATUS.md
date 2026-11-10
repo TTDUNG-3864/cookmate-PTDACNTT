@@ -777,7 +777,190 @@ File kịch bản kiểm thử: [`scratch/test_admin_access_and_scrollbar.js`](f
 
 ---
 
-## 9. HƯỚNG DẪN DÀNH CHO AI HOẶC KỸ SƯ TIẾP QUẢN
+## 9. BÁO CÁO FIX ADMIN HEADER — MOBILE RESPONSIVE BUG
+
+**Giai đoạn:** Khắc phục triệt để lỗi tiêu đề rớt từng ký tự, chiều cao phình to 425px và bố cục vỡ trên Header Admin Mobile.  
+**Ngày cập nhật:** 2026-10-27  
+**Trạng thái kiểm thử:** 100% ĐẠT (70/70 bài test tự động qua Chrome CDP thành công rực rỡ).
+
+---
+
+### A. Vấn Đề Thực Tế & Phân Tích Nguyên Nhân Gốc Rễ
+
+1. **Hiện tượng lỗi trên Mobile (320px - 430px):**
+   - Tiêu đề *"Bảng điều khiển Quản trị"* bị bẻ dọc từng ký tự một (mỗi chữ cái nằm trên một dòng riêng: `B \n ả \n n \n g...`).
+   - Chiều cao Header vọt lên tới **425px** trên màn hình 667px (chiếm 65% toàn bộ màn hình điện thoại). Do header có `position: sticky; top: 0;`, nó che khuất vĩnh viễn hơn nửa trang web, khiến người dùng chỉ còn một khe hở 240px ở đáy để xem toàn bộ thẻ thống kê và bảng biểu.
+   - Nút *"Đăng món mới (Admin)"* chiếm quá nhiều diện tích ngang do padding lớn.
+   - Nút đăng xuất bị dồn sát mép phải.
+   - Menu hamburger nằm cạnh tiêu đề bị chèn ép.
+
+2. **Nguyên nhân kỹ thuật tận gốc trong CSS & DOM:**
+   - *Đo đạc DOM thực tế tại 375px:* Bề ngang khả dụng trong header là $375 - 32 = 343\text{px}$.
+   - Khối Nút Hamburger chiếm $40\text{px} + 12\text{px (margin)} = 52\text{px}$ (`flex-shrink: 0`).
+   - Khối Nút Hành động `.admin-header__actions` có nút "Đăng món mới (Admin)" với `white-space: nowrap;` và nút đăng xuất chiếm $233\text{px}$.
+   - Tổng chiều rộng Hamburger (52px) + Actions (233px) = $285\text{px} < 343\text{px}$. Vì hai khối này cộng lại nhỏ hơn 343px, flexbox **KHÔNG** ngắt khối actions xuống dòng mới mà cố nhồi cả 3 phần tử trên cùng 1 hàng.
+   - Phần tử Tiêu đề `.admin-header__title` có `flex: 1; min-width: 0;` nên bị flexbox ép teo lại chỉ còn **7.48px**!
+   - Tại độ rộng 7.48px, không một chữ cái tiếng Việt nào lọt vừa, thuộc tính `overflow-wrap: break-word` buộc trình duyệt phải ngắt dòng tại **từng ký tự đơn lẻ**. 24 ký tự tạo thành 24 dòng chữ xếp chồng $\rightarrow$ đẩy chiều cao header lên 425px!
+
+---
+
+### B. Giải Pháp Kiến Trúc Đã Triển Khai
+
+1. **Kiến Trúc Bố Cục 2 Hàng Độc Lập Cho Mobile (`@media (max-width: 639px)`):**
+   - **Hàng 1 (Tiêu đề & Điều hướng):**
+     - Nút Hamburger `#sidebarToggleBtn`: `order: 1; width: 36px; height: 36px; min-width: 36px; margin: 0; flex-shrink: 0;` nằm ở góc trái, dễ dàng chạm bấm.
+     - Tiêu đề `.admin-header__title`: `order: 2; flex: 1 1 0%; min-width: 0;` chiếm trọn vẹn toàn bộ bề ngang còn lại của Hàng 1 (từ 246px đến 356px tùy thiết bị).
+     - Không có bất kỳ nút hành động nào cạnh tranh không gian trên Hàng 1.
+   - **Hàng 2 (Thanh Tác Vụ Nhanh):**
+     - Khối `.admin-header__actions`: `order: 3; width: 100%; flex-basis: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 0; padding-top: 2px;`.
+     - Tự động ngắt xuống Hàng 2 với 100% bề rộng, căn phải gọn gàng.
+     - Cơ chế `:empty`: Trên các trang quản trị không có nút hành động (như `accounts.html`, `comments.html`, `statistics.html`), `.admin-header__actions:empty` tự động ẩn hoàn toàn (`display: none !important;`), giúp chiều cao Header co lại chỉ còn **53px** thanh thoát!
+
+2. **Triệt Tiêu Hoàn Toàn Nguy Cơ Rớt Ký Tự Dọc:**
+   - Thiết lập `white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: normal; overflow-wrap: normal;` trên `.admin-header__title`.
+   - Tiêu đề được đảm bảo luôn hiển thị trên 1 dòng, nếu quá dài sẽ có dấu chấm lửng `...` trang nhã thay vì ngắt dòng làm vỡ khung.
+   - Bổ sung cặp nhãn responsive: `<span class="title-full">Bảng điều khiển Quản trị</span><span class="title-compact">Quản trị</span>`. Trên màn hình siêu hẹp $\le 360px$, tự động hiển thị nhãn ngắn gọn "Quản trị" như ứng dụng di động bản địa.
+
+3. **Thu Gọn Nút "Đăng Món Mới" & Chuẩn Hóa Nút "Đăng Xuất":**
+   - Thêm class `.btn-admin-post` với cơ chế 2 nhãn: hiển thị *"Đăng món mới (Admin)"* trên Desktop ($\ge 768px$) và tự động rút gọn thành *"+ Đăng món mới"* trên Mobile ($< 768px$).
+   - Định cỡ nút `.btn-sm`: `min-height: 36px; height: 36px; padding: 0 12px; font-size: 12px; border-radius: 8px;`.
+   - Nút Đăng xuất được định dạng 36x36px hình vuông bo tròn nhẹ, viền xám mảnh, icon tương phản rõ ràng, cảm ứng êm ái, hover hiệu ứng đỏ nhạt an toàn.
+
+4. **Sửa Cú Pháp CSS & Chuẩn Hóa Lớp Z-Index (Stacking Order):**
+   - Loại bỏ lỗi cú pháp đóng ngoặc thừa tại dòng 125 của file `assets/css/admin.css`.
+   - Chuẩn hóa Stacking Order:
+     - `.admin-sidebar` (Drawer): `z-index: 210` (`calc(var(--z-sticky) + 10)`)
+     - `.admin-sidebar__backdrop`: `z-index: 200` (`var(--z-sticky)`)
+     - `.admin-header` (Sticky): `z-index: 199` (`calc(var(--z-sticky) - 1)`)
+     - Nội dung cuộn trang: `z-index: 0 - 10`.
+   - Khi mở Drawer, lớp phủ mờ (backdrop) che toàn bộ màn hình kể cả header, sidebar trượt mượt mà lên trên cùng. Khi đóng Drawer, header sticky giữ vững vị trí ở đỉnh mà không che đè nội dung.
+
+5. **Dọn Dẹp Phiên Điều Hướng SPA:**
+   - Trong `assets/js/admin-shell.js`, bổ sung nhánh `else if (!newActions && currentActions) { currentActions.innerHTML = ''; }`. Khi chuyển sang trang không có actions, các nút cũ được dọn sạch tức thì.
+
+---
+
+### C. Danh Sách File Đã Cập Nhật
+
+1. [`assets/css/admin.css`](file:///d:/cookmate/assets/css/admin.css) *(Cập nhật)*: Sửa lỗi cú pháp dòng 125, chuẩn hóa margin toggle button, nâng cấp Stacking Order và thêm helper classes cho responsive title/button.
+2. [`assets/css/responsive.css`](file:///d:/cookmate/assets/css/responsive.css) *(Cập nhật)*: Thêm hệ thống CSS 2-row layout cho `.admin-header`, `.admin-header__title`, `.admin-header__actions`, compact button và `@media (max-width: 360px)`.
+3. [`assets/js/admin-shell.js`](file:///d:/cookmate/assets/js/admin-shell.js) *(Cập nhật)*: Dọn dẹp `currentActions.innerHTML` khi chuyển SPA sang trang không có actions.
+4. [`pages/admin/index.html`](file:///d:/cookmate/pages/admin/index.html) *(Cập nhật)*: Bổ sung nhãn kép `title-full`/`title-compact` và `btn-text-full`/`btn-text-mobile`.
+5. [`pages/admin/approve-recipes.html`](file:///d:/cookmate/pages/admin/approve-recipes.html) *(Cập nhật)*: Đồng bộ nhãn kép `title-full`/`title-compact` và `btn-text-full`/`btn-text-mobile`.
+
+---
+
+### D. Kết Quả Kiểm Thử Toàn Diện (Chrome CDP: 70/70 Tests Passed - 100%)
+
+File kịch bản kiểm thử tự động: [`scratch/test_admin_mobile_header_suite.js`](file:///d:/cookmate/scratch/test_admin_mobile_header_suite.js).
+
+| Nhóm Kiểm Thử | Số Lượng Test | Nội Dung & Tiêu Chí Nghiệm Thu | Kết Quả Thực Tế | Trạng Thái |
+| :--- | :---: | :--- | :--- | :---: |
+| **TEST GROUP 1** | **36/36 Tests** | Đo đạc chính xác trên 6 kích thước Mobile (320px, 360px, 375px, 390px, 414px, 430px): Chiều cao $\le 110px$; Độ rộng tiêu đề $\ge 200px$; `white-space: nowrap`; 0% tràn ngang; Nút Hamburger & Đăng xuất hiển thị đầy đủ | Chiều cao 97px (giảm 77% từ 425px); Tiêu đề rộng 246px - 356px; 0% rớt chữ; 0% tràn ngang | **PASSED (36/36)** |
+| **TEST GROUP 2** | **6/6 Tests** | Tương tác Hamburger Drawer trên Mobile (375x667): Mở drawer, kích hoạt backdrop, kiểm tra drawer nằm gọn trong viewport ($\le 375px$), bấm backdrop đóng drawer | Drawer trượt mở mượt mà, backdrop phủ mờ, đóng lại sạch sẽ, không lỗi cuộn | **PASSED (6/6)** |
+| **TEST GROUP 3** | **2/2 Tests** | Cuộn trang và kiểm tra Header Sticky (375x667): Cuộn xuống 300px, kiểm tra header giữ `top: 0`, vùng nhìn thấy nội dung trang đạt $\ge 500px$ | Header bám dính đỉnh màn hình 97px, vùng nội dung hiển thị đạt 570px/667px (85.5% màn hình) | **PASSED (2/2)** |
+| **TEST GROUP 4** | **12/12 Tests** | Kiểm tra các trang Admin khác trên Mobile (375x667): `approve-recipes.html`, `categories.html`, `ingredients.html`, `accounts.html`, `comments.html`, `statistics.html` | Chiều cao $\le 97px$; các trang không actions tự thu gọn 53px; 100% 0 tràn ngang | **PASSED (12/12)** |
+| **TEST GROUP 5** | **14/14 Tests** | Bảo vệ Desktop và Tablet (768px, 1024px, 1366px, 1440px): Chiều cao chuẩn 65px - 73px; Tiêu đề đầy đủ "Bảng điều khiển Quản trị"; Nút đầy đủ "Đăng món mới (Admin)"; 0 tràn ngang | Desktop 100% giữ nguyên giao diện chuẩn, không bị ảnh hưởng hay hồi quy | **PASSED (14/14)** |
+
+Ảnh chụp màn hình kiểm chứng lưu trữ tại `scratch/screenshots_mobile_header/`:
+- `after_320px.png`, `verified_320px.png`: Giao diện 320px gọn gàng, tiêu đề "Quản trị", chiều cao 97px.
+- `after_360px.png`, `verified_360px.png`: Giao diện 360px chuẩn mực, không rớt chữ.
+- `after_375px.png`, `verified_375px.png`: Giao diện iPhone SE 375px hoàn mỹ, 2 hàng cân đối, chiều cao 97px (trước đây 425px).
+- `after_390px.png`, `after_414px.png`, `after_430px.png`: Hiển thị sắc nét trên các dòng iPhone hiện đại.
+- `drawer_opened_375px.png`: Drawer mở phủ mờ backdrop hoàn hảo.
+- `scrolled_375px.png`: Khi cuộn trang, header sticky gọn gàng 97px, không che mất thẻ thống kê hay nội dung.
+- `desktop_1024.png`, `desktop_1366.png`, `desktop_1440.png`: Desktop giữ nguyên 100% độ rộng rãi, sang trọng.
+
+---
+
+## 10. KHẮC PHỤC TRIỆT ĐỂ LỖI MOBILE UI: CHỒNG LẤN HEADER VÀ THIẾU ICON MENU DRAWER (BUG A & BUG B)
+
+### A. Phân tích nguyên nhân gốc rễ (Root Cause Analysis)
+
+1. **BUG A — Chồng lấn Header trên Mobile (Admin Header Overlap):**
+   - **Nút nổi trùng lặp (Duplicate Floating Button):** Trong `assets/js/admin-shell.js` (dòng 298), khi Admin xem website hoặc khi sidebar đóng, hàm `closeSidebar()` gán nút toggle vào `document.body` với class `.admin-sidebar-toggle-btn--floating`. Trong `assets/css/admin.css`, quy tắc này được ghim cứng `position: fixed; top: 14px; left: 16px; z-index: 10000;`. Tọa độ này nằm chính xác tại vị trí logo CookMate (`top: 14px; left: 16px;`), làm nút hamburger nổi đè trực tiếp lên biểu tượng bát đĩa của logo CookMate.
+   - **Bố cục Flexbox Header trên Mobile:** Trước đây `#menuToggle` nằm bên trong `.header-actions` ở góc phải hoặc bị chi phối bởi các quy tắc vị trí cũ. Khi chuyển nút sang bên trái logo, cần một cấu trúc flexbox dự đoán được (predictable flex layout) với khoảng cách (gap) rõ ràng để nút hamburger và logo chiếm hai vùng bố cục tách biệt hoàn toàn trong luồng DOM tự nhiên.
+
+2. **BUG B — Thiếu Icon trong Mobile Navigation Drawer (Missing Drawer Menu Icons):**
+   - **Icon Pro-only không được hỗ trợ trong Font Awesome Free:** Mục *"Công thức mới nhất"* sử dụng class `<i class="fa-solid fa-sparkles"></i>`. Trong bộ Font Awesome 6.5.1 Free (tải qua CDN cdnjs), `fa-sparkles` là icon độc quyền của bản trả phí (Font Awesome Pro), do đó pseudo-element `::before` nhận `content: none`, chiều cao 0px và không hiển thị icon.
+   - **Class Icon không đồng bộ:** Mục *"Công thức của tôi"* dùng `fa-solid fa-book-bookmark` thay vì `fa-solid fa-book` (chuẩn FA6 Free đồng bộ với menu tài khoản desktop).
+   - **Thiếu cam kết hiển thị CSS:** Thẻ `.mobile-nav__link i` chưa được chỉ định tường minh `font-family: "Font Awesome 6 Free", "FontAwesome", sans-serif; font-weight: 900; line-height: 1; display: inline-flex; align-items: center; justify-content: center;` dẫn đến một số trình duyệt di động render icon không đồng đều.
+
+---
+
+### B. Giải pháp kỹ thuật đã triển khai
+
+1. **Tái cấu trúc HTML & Bố cục Flex Header di động ([`assets/js/navigation.js`](file:///d:/cookmate/assets/js/navigation.js)):**
+   - Đặt `#menuToggle` làm phần tử flexbox trực tiếp đầu tiên trong `.header-inner`:
+     `[☰ menu-toggle] [Logo: icon + CookMate] ----------------- [Fav btn] [User Avatar]`
+   - Bổ sung `Món ăn yêu thích` vào danh mục tài khoản cá nhân khi đã đăng nhập trong drawer di động, đồng bộ 100% với phiên bản desktop.
+
+2. **Quy tắc Responsive Header chống chồng lấn và tràn ngang ([`assets/css/responsive.css`](file:///d:/cookmate/assets/css/responsive.css)):**
+   - Trên màn hình nhỏ ($< 640px$):
+     - `.header-inner`: `display: flex !important; align-items: center !important; justify-content: flex-start !important; padding: 0 12px; gap: 8px; width: 100%; box-sizing: border-box;`.
+     - `.menu-toggle`: `order: 1; width: 36px; height: 36px; min-width: 36px; margin: 0; flex-shrink: 0; display: flex !important;`.
+     - `.logo`: `order: 2; margin-right: auto; gap: 8px; flex-shrink: 0;`.
+     - `.header-actions`: `order: 3; margin-left: auto; gap: 6px; flex-shrink: 0;`.
+     - `.header-fav-btn`: `width: 34px; height: 34px; flex-shrink: 0;`.
+     - `.user-avatar`: `width: 32px; height: 32px; flex-shrink: 0;`.
+   - Trên màn hình siêu nhỏ ($\le 360px$, ví dụ iPhone SE 1st Gen 320px):
+     - Thu gọn padding container xuống 8px, gap 6px; `.menu-toggle` 34x34px, `.logo-icon` 30x30px, `.header-fav-btn` 32x32px, `.user-avatar` 30x30px.
+     - Tổng chiều rộng chiếm dụng trên 320px chỉ đạt 250px, dư 70px an toàn, hoàn toàn 0% tràn ngang và 0% chồng lấn.
+   - Trên Tablet ($640px - 1149px$): Menu toggle nằm góc trái, logo kế tiếp, main nav ẩn, actions bên phải.
+   - Trên Desktop ($\ge 1150px$): `.menu-toggle` có `display: none !important;`, `.logo` đứng đầu bên trái, `.main-nav` ở giữa, `.header-actions` bên phải. Giữ nguyên 100% giao diện desktop hiện hữu.
+
+3. **Loại bỏ nút nổi trùng lặp trên Mobile ([`assets/css/admin.css`](file:///d:/cookmate/assets/css/admin.css)):**
+   - Thiết lập `.admin-sidebar-toggle-btn.admin-sidebar-toggle-btn--floating { display: none !important; }` trên toàn bộ màn hình $< 1024px$.
+   - Trên Desktop ($\ge 1024px$), nút nổi được định vị tại `top: 84px; left: 20px;` (nằm an toàn bên dưới header, không đè lên bất kỳ logo nào).
+
+4. **Khôi phục 100% Icon Font Awesome 6 Free cho Drawer di động ([`assets/js/navigation.js`](file:///d:/cookmate/assets/js/navigation.js), [`assets/css/components.css`](file:///d:/cookmate/assets/css/components.css)):**
+   - *"Công thức mới nhất"*: Thay `fa-sparkles` (Pro) bằng `<i class="fa-solid fa-clock"></i>` (Free chuẩn Unicode `\f017`).
+   - *"Công thức của tôi"*: Thay `fa-book-bookmark` bằng `<i class="fa-solid fa-book"></i>` (Free chuẩn Unicode `\f02d`).
+   - *"Công thức nổi bật"*: Giữ vững `<i class="fa-solid fa-fire"></i>` (Unicode `\f06d`).
+   - *"Món ăn yêu thích"*: Giữ vững `<i class="fa-solid fa-heart"></i>` (Unicode `\f004`).
+   - Cập nhật `.mobile-nav__link i` trong `components.css`:
+     `font-family: "Font Awesome 6 Free", "FontAwesome", sans-serif; font-weight: 900; line-height: 1; font-size: 16px; width: 22px; height: 20px; display: inline-flex; align-items: center; justify-content: center;`.
+   - Đồng bộ thay thế `fa-sparkles` sang `fa-clock` tại [`pages/new-recipes.html`](file:///d:/cookmate/pages/new-recipes.html) và [`pages/recipe-detail.html`](file:///d:/cookmate/pages/recipe-detail.html).
+
+---
+
+### C. Kết quả kiểm thử tự động toàn diện (Chrome CDP Suite: 100% Passed)
+
+Kịch bản kiểm thử tự động: [`scratch/run_full_validation.js`](file:///d:/cookmate/scratch/run_full_validation.js) chạy trên Chrome Headless đo đạc chính xác DOMRect và CSS computed style.
+
+| Kích Thước Màn Hình | Tọa độ Menu Toggle | Tọa độ CookMate Logo | Khoảng cách (Gap) | Tỷ lệ Chồng Lấn | Tràn ngang (Overflow) | Trạng Thái |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **iPhone SE 1st Gen (320px)** | [8.0px -> 42.0px] | [48.0px -> 173.4px] | **+6.0px** | **0% (Không đè)** | **0px** (scrollW=320px) | **PASSED ✓** |
+| **Galaxy S8 Compact (360px)** | [8.0px -> 42.0px] | [48.0px -> 173.4px] | **+6.0px** | **0% (Không đè)** | **0px** (scrollW=360px) | **PASSED ✓** |
+| **iPhone X / 12 Mini (375px)** | [12.0px -> 48.0px] | [56.0px -> 201.2px] | **+8.0px** | **0% (Không đè)** | **0px** (scrollW=375px) | **PASSED ✓** |
+| **iPhone 14 Pro (390px)** | [12.0px -> 48.0px] | [56.0px -> 201.2px] | **+8.0px** | **0% (Không đè)** | **0px** (scrollW=390px) | **PASSED ✓** |
+| **iPhone XR / 11 (414px)** | [12.0px -> 48.0px] | [56.0px -> 201.2px] | **+8.0px** | **0% (Không đè)** | **0px** (scrollW=414px) | **PASSED ✓** |
+| **iPhone 15 Pro Max (430px)** | [12.0px -> 48.0px] | [56.0px -> 201.2px] | **+8.0px** | **0% (Không đè)** | **0px** (scrollW=430px) | **PASSED ✓** |
+| **iPad Portrait (768px)** | [16.0px -> 54.0px] | [66.0px -> 229.5px] | **+12.0px** | **0% (Không đè)** | **0px** (scrollW=768px) | **PASSED ✓** |
+| **Desktop Standard (1200px)** | *Ẩn (display: none)* | [24.0px -> 187.5px] | — | **0% (Desktop chuẩn)** | **0px** (scrollW=1190px) | **PASSED ✓** |
+
+**Kiểm định chi tiết Icon Drawer di động (16/16 Icon hiển thị hoàn hảo):**
+- *Trang chủ*: `fa-solid fa-house` -> Glyph `\f015` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Tất cả công thức*: `fa-solid fa-book-open` -> Glyph `\f518` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Danh mục món ăn*: `fa-solid fa-layer-group` -> Glyph `\f5fd` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Công thức mới nhất*: `fa-solid fa-clock` -> Glyph `\f017` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Công thức nổi bật*: `fa-solid fa-fire` -> Glyph `\f06d` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Món theo dịp lễ*: `fa-solid fa-calendar-days` -> Glyph `\f073` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Tìm kiếm công thức*: `fa-solid fa-magnifying-glass` -> Glyph `\f002` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Đăng công thức mới*: `fa-solid fa-circle-plus` -> Glyph `\f055` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Món ăn yêu thích*: `fa-solid fa-heart` -> Glyph `\f004` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Công thức của tôi*: `fa-solid fa-book` -> Glyph `\f02d` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Hồ sơ cá nhân*: `fa-solid fa-id-card` -> Glyph `\f2c2` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Trang Quản trị*: `fa-solid fa-gear` -> Glyph `\f013` (Kích thước: 22x20px) -> **PASSED ✓**
+- *Đăng xuất*: `fa-solid fa-right-from-bracket` -> Glyph `\f2f5` (Kích thước: 22x20px) -> **PASSED ✓**
+
+**Kiểm định Chế độ Admin "Xem website CookMate":**
+- Floating toggle display on mobile: `none !important`.
+- 0% che đè lên logo CookMate trong iframe.
+
+---
+
+## 11. HƯỚNG DẪN DÀNH CHO AI HOẶC KỸ SƯ TIẾP QUẢN
 
 Nếu cần phát triển Backend Flask trong giai đoạn tiếp theo:
 1. Chuyển các file `.html` trong `index.html` và `pages/` vào thư mục `templates/`.

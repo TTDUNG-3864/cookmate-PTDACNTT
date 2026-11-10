@@ -43,6 +43,12 @@ var Navigation = {
     var base = getBasePath();
     return '' +
       '<div class="header-inner container">' +
+        '<button class="menu-toggle" id="menuToggle" aria-label="Mở menu" aria-expanded="false">' +
+          '<span class="hamburger-line"></span>' +
+          '<span class="hamburger-line"></span>' +
+          '<span class="hamburger-line"></span>' +
+        '</button>' +
+
         '<a href="' + base + 'index.html" class="logo">' +
           '<div class="logo-icon">' +
             '<i class="fa-solid fa-utensils"></i>' +
@@ -76,12 +82,6 @@ var Navigation = {
           '</a>' +
 
           '<div class="auth-area" id="authArea"></div>' +
-
-          '<button class="menu-toggle" id="menuToggle" aria-label="Mở menu" aria-expanded="false">' +
-            '<span class="hamburger-line"></span>' +
-            '<span class="hamburger-line"></span>' +
-            '<span class="hamburger-line"></span>' +
-          '</button>' +
         '</div>' +
       '</div>';
   },
@@ -122,7 +122,7 @@ var Navigation = {
               '<a href="' + base + 'pages/categories.html" class="mobile-nav__link" data-page="categories">' +
                 '<i class="fa-solid fa-layer-group"></i> <span>Danh mục món ăn</span></a>' +
               '<a href="' + base + 'pages/new-recipes.html" class="mobile-nav__link" data-page="new-recipes">' +
-                '<i class="fa-solid fa-sparkles"></i> <span>Công thức mới nhất</span></a>' +
+                '<i class="fa-solid fa-clock"></i> <span>Công thức mới nhất</span></a>' +
               '<a href="' + base + 'pages/featured-recipes.html" class="mobile-nav__link" data-page="featured">' +
                 '<i class="fa-solid fa-fire"></i> <span>Công thức nổi bật</span></a>' +
               '<a href="' + base + 'pages/holiday-recipes.html" class="mobile-nav__link" data-page="holiday">' +
@@ -143,7 +143,7 @@ var Navigation = {
                 '<span class="mobile-nav__badge" id="mobileFavBadge"' + (favCount > 0 ? '' : ' style="display:none"') + '>' + favCount + '</span>' +
               '</a>' +
               '<a href="' + base + 'pages/account/my-recipes.html" class="mobile-nav__link" data-page="my-recipes">' +
-                '<i class="fa-solid fa-book-bookmark"></i> <span>Công thức của tôi</span></a>' +
+                '<i class="fa-solid fa-book"></i> <span>Công thức của tôi</span></a>' +
             '</nav>' +
           '</div>' +
 
@@ -368,8 +368,10 @@ var Navigation = {
         '<nav class="mobile-nav__menu" aria-label="Tài khoản cá nhân">' +
           '<a href="' + base + 'pages/account/profile.html" class="mobile-nav__link" data-page="profile">' +
             '<i class="fa-solid fa-id-card"></i> <span>Hồ sơ cá nhân</span></a>' +
+          '<a href="' + base + 'pages/account/favorites.html" class="mobile-nav__link" data-page="favorites">' +
+            '<i class="fa-solid fa-heart"></i> <span>Món ăn yêu thích</span></a>' +
           '<a href="' + base + 'pages/account/my-recipes.html" class="mobile-nav__link" data-page="my-recipes">' +
-            '<i class="fa-solid fa-book-bookmark"></i> <span>Công thức của tôi</span></a>' +
+            '<i class="fa-solid fa-book"></i> <span>Công thức của tôi</span></a>' +
           '<a href="' + base + 'pages/account/recipe-form.html" class="mobile-nav__link" data-page="recipe-form">' +
             '<i class="fa-solid fa-circle-plus"></i> <span>Đăng công thức mới</span></a>' +
           (user.role === 'admin'

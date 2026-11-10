@@ -20,7 +20,7 @@
   top: 0;
   left: 0;
   bottom: 0;
-  z-index: var(--z-sticky);
+  z-index: calc(var(--z-sticky) + 10);
   transform: translateX(-100%);
   transition: transform var(--transition-slow);
   overflow-x: hidden !important;
@@ -119,12 +119,6 @@
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
   cursor: pointer;
-  transition: all var(--transition);
-  margin-left: auto;
-  flex-shrink: 0;
-}
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  cursor: pointer;
   margin-left: auto;
   transition: all var(--transition);
   font-size: var(--text-base);
@@ -152,9 +146,10 @@
   background-color: var(--bg-white, #FFFFFF);
   border: 1px solid var(--border, #E2E8F0);
   margin-left: 0;
-  margin-right: var(--space-3);
+  margin-right: 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   font-size: var(--text-lg);
+  flex-shrink: 0;
 }
 
 .admin-sidebar-toggle-btn.admin-sidebar-toggle-btn--bars:hover {
@@ -164,16 +159,25 @@
   transform: translateY(-1px);
 }
 
-/* Nút nổi khi xem website và sidebar đóng */
+/* Nút nổi khi xem website và sidebar đóng:
+   Ẩn hoàn toàn trên màn hình nhỏ/mobile để không đè lên CookMate logo hay thanh header;
+   Dành cho Desktop khi xem website hoặc sidebar đóng */
 .admin-sidebar-toggle-btn.admin-sidebar-toggle-btn--floating {
+  display: none !important;
   position: fixed;
-  top: 14px;
-  left: 16px;
   z-index: 10000;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
   background-color: #FFFFFF;
   color: var(--text, #1E293B);
   border: 1px solid var(--border, #E2E8F0);
+}
+
+@media (min-width: 1024px) {
+  .admin-sidebar-toggle-btn.admin-sidebar-toggle-btn--floating {
+    display: inline-flex !important;
+    top: 84px;
+    left: 20px;
+  }
 }
 
 .admin-sidebar__close {
@@ -310,7 +314,7 @@
   position: fixed;
   inset: 0;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: calc(var(--z-sticky) - 1);
+  z-index: var(--z-sticky);
   opacity: 0;
   visibility: hidden;
   transition: opacity var(--transition-slow), visibility var(--transition-slow);
@@ -382,6 +386,16 @@
   font-size: var(--text-xl);
   font-weight: var(--font-bold);
   color: var(--text);
+}
+
+.admin-header__title .title-compact,
+.btn-admin-post .btn-text-mobile {
+  display: none;
+}
+
+.admin-header__title .title-full,
+.btn-admin-post .btn-text-full {
+  display: inline;
 }
 
 .admin-header__actions {
