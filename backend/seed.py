@@ -455,7 +455,7 @@ SEED_RECIPES = [
         "difficulty": "Trung bình",
         "servings": 4,
         "ingredients": [
-            {"ingredientId": 2, "name": "Thịt gà ta nguyên con", "amount": 1200, "unit": "g"},
+            {"ingredientId": 2, "name": "Thịt gà ta (nguyên con, ức gà hoặc đùi gà)", "amount": 1200, "unit": "g"},
             {"ingredientId": 22, "name": "Sả tươi băm nhuyễn", "amount": 60, "unit": "g"},
             {"ingredientId": 21, "name": "Ớt sừng và ớt cay", "amount": 20, "unit": "g"},
             {"ingredientId": 10, "name": "Tỏi băm thơm", "amount": 25, "unit": "g"},
@@ -679,7 +679,7 @@ SEED_RECIPES = [
         "difficulty": "Trung bình",
         "servings": 3,
         "ingredients": [
-            {"ingredientId": 2, "name": "Thịt đùi gà ta chặt miếng", "amount": 500, "unit": "g"},
+            {"ingredientId": 2, "name": "Thịt gà (ức gà hoặc đùi gà chặt miếng)", "amount": 500, "unit": "g"},
             {"ingredientId": 23, "name": "Gừng non thái sợi dài", "amount": 50, "unit": "g"},
             {"ingredientId": 10, "name": "Tỏi băm nhỏ", "amount": 15, "unit": "g"},
             {"ingredientId": 13, "name": "Nước mắm ngon", "amount": 30, "unit": "ml"},

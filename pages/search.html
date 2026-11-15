@@ -271,9 +271,12 @@
       var recipes = CookMateStorage.getAllRecipes();
       var notice = document.getElementById('searchNotice');
 
-      // 1. Lọc theo từ khóa (Tìm gần đúng trên tên món hoặc nguyên liệu)
+      // 1. Lọc theo từ khóa (Tìm gần đúng & đồng nghĩa nguyên liệu như "ức gà" -> "thịt gà")
       if (keyword) {
         recipes = recipes.filter(function(r) {
+          if (typeof matchesRecipeSearch === 'function') {
+            return matchesRecipeSearch(r, keyword);
+          }
           var titleMatch = r.title && r.title.toLowerCase().includes(keyword);
           var descMatch = r.description && r.description.toLowerCase().includes(keyword);
           var ingredientMatch = r.ingredients && r.ingredients.some(function(ing) {

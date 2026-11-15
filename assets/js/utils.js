@@ -259,3 +259,64 @@ function debounce(fn, delay) {
     }, delay);
   };
 }
+
+// ===== Smart Vietnamese Culinary Search Matcher =====
+var CULINARY_SYNONYM_GROUPS = [
+  ['uc ga', 'ức gà', 'dui ga', 'đùi gà', 'canh ga', 'cánh gà', 'thit ga', 'thịt gà', 'ga ta', 'gà ta'],
+  ['thit lon', 'thịt lợn', 'thit heo', 'thịt heo', 'ba chi', 'ba chỉ', 'ba roi', 'ba rọi', 'nac vai', 'nạc vai', 'suon', 'sườn'],
+  ['than bo', 'thăn bò', 'bap bo', 'bắp bò', 'nam bo', 'nạm bò', 'thit bo', 'thịt bò'],
+  ['dau phu', 'đậu phụ', 'dau hu', 'đậu hũ', 'tau hu', 'tàu hũ', 'dau mo', 'đậu mơ'],
+  ['tom su', 'tôm sú', 'tom dat', 'tôm đất', 'tom tuoi', 'tôm tươi'],
+  ['thom', 'thơm', 'khom', 'khóm', 'dua', 'dứa']
+];
+
+function expandSearchKeywords(keyword) {
+  var raw = String(keyword || '').toLowerCase().trim();
+  if (!raw) return [];
+  var norm = slugify(raw).replace(/-/g, ' ');
+  var terms = [raw];
+  if (norm && terms.indexOf(norm) === -1) terms.push(norm);
+
+  CULINARY_SYNONYM_GROUPS.forEach(function (group) {
+    var matchedGroup = group.some(function (syn) {
+      return raw.indexOf(syn) !== -1 || norm.indexOf(syn) !== -1;
+    });
+    if (matchedGroup) {
+      group.forEach(function (syn) {
+        if (terms.indexOf(syn) === -1) terms.push(syn);
+      });
+    }
+  });
+  return terms;
+}
+
+function matchesRecipeSearch(recipe, keyword) {
+  if (!keyword || !String(keyword).trim()) return true;
+  if (!recipe) return false;
+  var terms = expandSearchKeywords(keyword);
+  var haystackParts = [
+    recipe.title || '',
+    recipe.description || '',
+    recipe.categoryName || '',
+    recipe.occasion || ''
+  ];
+  if (Array.isArray(recipe.ingredients)) {
+    recipe.ingredients.forEach(function (ing) {
+      if (typeof ing === 'string') {
+        haystackParts.push(ing);
+      } else if (ing) {
+        haystackParts.push(ing.name || '');
+        if (ing.ingredientId === 2) haystackParts.push('ức gà đùi gà thịt gà');
+        if (ing.ingredientId === 1) haystackParts.push('thịt heo thịt lợn ba chỉ sườn');
+        if (ing.ingredientId === 3) haystackParts.push('thịt bò thăn bò bắp bò');
+        if (ing.ingredientId === 6) haystackParts.push('đậu hũ đậu phụ tàu hũ');
+      }
+    });
+  }
+  var fullText = haystackParts.join(' ').toLowerCase();
+  var fullNorm = slugify(fullText).replace(/-/g, ' ');
+
+  return terms.some(function (t) {
+    return fullText.indexOf(t) !== -1 || fullNorm.indexOf(t) !== -1;
+  });
+}

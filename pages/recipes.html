@@ -391,10 +391,13 @@
         var allApproved = CookMateStorage.getAllRecipes();
         var results = allApproved.slice();
 
-        // 1. Keyword search (Title + ingredients + description)
+        // 1. Keyword search (Title + ingredients + description + culinary synonyms like "ức gà")
         if (state.keyword) {
           var kw = state.keyword.toLowerCase();
           results = results.filter(function(r) {
+            if (typeof matchesRecipeSearch === 'function') {
+              return matchesRecipeSearch(r, kw);
+            }
             var titleMatch = r.title && r.title.toLowerCase().includes(kw);
             var descMatch = r.description && r.description.toLowerCase().includes(kw);
             var ingMatch = false;

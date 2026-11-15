@@ -260,6 +260,12 @@ var CookMateChefBot = (function () {
     }
 
     // 5. Có nguyên liệu này nấu món gì? (Nhóm 1 - Fridge Matcher)
+    var expandedNorm = norm;
+    if (typeof expandSearchKeywords === 'function') {
+      expandedNorm = expandSearchKeywords(raw).join(' ');
+    } else if (norm.indexOf('uc ga') !== -1 || norm.indexOf('dui ga') !== -1) {
+      expandedNorm += ' thit ga ga ta';
+    }
     var matchedRecipes = [];
     allRecipes.forEach(function (r) {
       var have = [];
@@ -267,7 +273,7 @@ var CookMateChefBot = (function () {
       (r.ingredients || []).forEach(function (ing) {
         var inorm = _normalizeVi(ing.name);
         var words = inorm.split(' ').slice(0, 2).join(' ');
-        if ((inorm && norm.indexOf(inorm) !== -1) || (words.length >= 4 && norm.indexOf(words) !== -1)) {
+        if ((inorm && expandedNorm.indexOf(inorm) !== -1) || (words.length >= 4 && expandedNorm.indexOf(words) !== -1)) {
           have.push(ing.name);
         } else {
           miss.push(ing.name);

@@ -750,6 +750,17 @@ def get_all_recipes(
         if search:
             q_norm = slugify_vietnamese(search).replace("-", " ")
             q_lower = search.strip().lower()
+            synonym_groups = [
+                ["uc ga", "ức gà", "dui ga", "đùi gà", "canh ga", "thit ga", "thịt gà", "ga ta"],
+                ["thit lon", "thịt lợn", "thit heo", "thịt heo", "ba chi", "ba roi", "suon"],
+                ["than bo", "bap bo", "nam bo", "thit bo", "thịt bò"],
+                ["dau phu", "đậu phụ", "dau hu", "đậu hũ", "tau hu"],
+            ]
+            search_terms = [q_lower, q_norm]
+            for grp in synonym_groups:
+                if any(s in q_lower or s in q_norm for s in grp):
+                    search_terms.extend(grp)
+
             filtered = []
             for r in recipes:
                 haystack = " ".join(
@@ -761,10 +772,9 @@ def get_all_recipes(
                         " ".join(i["name"] for i in r.get("ingredients", [])),
                     ]
                 )
-                if (
-                    q_lower in haystack.lower()
-                    or q_norm in slugify_vietnamese(haystack).replace("-", " ")
-                ):
+                h_lower = haystack.lower()
+                h_norm = slugify_vietnamese(haystack).replace("-", " ")
+                if any(t in h_lower or t in h_norm for t in search_terms if t):
                     filtered.append(r)
             return filtered
         return recipes
