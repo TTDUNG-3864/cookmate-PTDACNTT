@@ -13,6 +13,14 @@ var Navigation = {
     this.updateAuthArea();
     this.highlightCurrentNav();
     updateFavoriteBadge();
+
+    if (typeof CookMateChefBot === 'undefined' && !document.getElementById('cmChefBotScript')) {
+      var base = typeof getBasePath === 'function' ? getBasePath() : './';
+      var botScript = document.createElement('script');
+      botScript.id = 'cmChefBotScript';
+      botScript.src = base + 'assets/js/chatbot.js';
+      document.body.appendChild(botScript);
+    }
   },
 
   // ---------------------------------------------------------------

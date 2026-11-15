@@ -19,6 +19,7 @@ Serves both:
 import os
 from typing import Any, Dict, Optional
 
+from backend import chatbot as ai_chatbot
 from backend import database as db
 from backend.flask_compat import (
      USING_NATIVE_FLASK,
@@ -478,6 +479,19 @@ def api_admin_statistics():
 def api_admin_reset():
     db.init_db(force_reset=True)
     return jsonify({"success": True, "message": "Đã khôi phục cơ sở dữ liệu mặc định."})
+
+
+# ============================================================
+# COOKMATE CHEFBOT — AI CHATBOT API (3 FEATURE GROUPS)
+# ============================================================
+
+@app.route("/api/chatbot", methods=["POST"])
+def api_chatbot():
+    body = request.get_json(silent=True) or {}
+    message = body.get("message", "")
+    context = body.get("context") or {}
+    result = ai_chatbot.generate_chatbot_response(message=message, context=context)
+    return jsonify({"success": True, **result})
 
 
 if __name__ == "__main__":
