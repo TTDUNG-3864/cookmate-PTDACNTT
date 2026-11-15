@@ -82,22 +82,26 @@ D:\cookmate\
 
 ## 2. Hướng dẫn chạy dự án
 
-### Cách 1: Sử dụng Python HTTP Server (Khuyên dùng)
+### Cách 1: Chạy Full-Stack (Python Flask Backend + SQLite + Frontend) — Khuyên dùng
+Mở terminal tại thư mục dự án và chạy trực tiếp:
+```powershell
+cd d:\cookmate-PTDACNTT-main
+python app.py
+```
+- Hệ thống tự động khởi tạo cơ sở dữ liệu quan hệ SQLite tại `database/cookmate.db` với đầy đủ 8 bảng (`users`, `categories`, `ingredients`, `recipes`, `recipe_ingredients`, `recipe_steps`, `comments`, `favorites`) và dữ liệu seed chuẩn.
+- Mở trình duyệt truy cập: [http://127.0.0.1:5000](http://127.0.0.1:5000)
+- Các RESTful API sẵn sàng tại `/api/health`, `/api/bootstrap`, `/api/recipes`, `/api/auth/login`, `/api/auth/register`, `/api/categories`, `/api/ingredients`, `/api/comments`, `/api/favorites`, `/api/admin/...`.
+
+### Cách 2: Sử dụng Python Static HTTP Server
 Mở terminal tại thư mục dự án và chạy:
 ```powershell
-cd d:\cookmate
+cd d:\cookmate-PTDACNTT-main
 python -m http.server 8000
 ```
 Sau đó mở trình duyệt và truy cập: [http://localhost:8000](http://localhost:8000)
 
-### Cách 2: Sử dụng Node.js (npx serve hoặc http-server)
-```powershell
-cd d:\cookmate
-npx serve . -p 8000
-```
-
-### Cách 3: Mở trực tiếp file HTML
-Bạn có thể nhấp đúp trực tiếp vào file `d:\cookmate\index.html` trong File Explorer để mở bằng Chrome, Edge hoặc Firefox. Mọi tương tác giao diện và `localStorage` đều hoạt động mượt mà.
+### Cách 3: Mở trực tiếp file HTML (Offline / LocalStorage Mode)
+Bạn có thể nhấp đúp trực tiếp vào file `d:\cookmate-PTDACNTT-main\index.html` trong File Explorer để mở bằng Chrome, Edge hoặc Firefox. `CookMateStorage` hoạt động ở chế độ kép (Dual-Mode): tự động đồng bộ với Flask REST API khi chạy qua HTTP Server và hoạt động độc lập 100% qua `localStorage` khi mở trực tiếp `file://`.
 
 ---
 

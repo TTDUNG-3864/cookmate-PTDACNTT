@@ -191,14 +191,14 @@
           if (input) input.value = state.keyword;
         }
 
-        // Tab or sort
-        var tabParam = params.get('tab') || params.get('sort');
+        // Tab or sort or filter
+        var tabParam = params.get('tab') || params.get('sort') || params.get('filter');
         if (tabParam) {
           if (['newest', 'featured', 'rating', 'all', 'popular'].includes(tabParam)) {
             state.tab = tabParam === 'popular' ? 'rating' : tabParam;
           }
         }
-        if (params.get('featured') === '1') {
+        if (params.get('featured') === '1' || params.get('featured') === 'true') {
           state.tab = 'featured';
         }
 

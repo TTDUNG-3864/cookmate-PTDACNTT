@@ -960,11 +960,25 @@ Kịch bản kiểm thử tự động: [`scratch/run_full_validation.js`](file:
 
 ---
 
-## 11. HƯỚNG DẪN DÀNH CHO AI HOẶC KỸ SƯ TIẾP QUẢN
+## 11. HOÀN THIỆN BACKEND PYTHON FLASK + SQLITE3 & ĐỒNG BỘ DUAL-MODE FRONTEND
 
-Nếu cần phát triển Backend Flask trong giai đoạn tiếp theo:
-1. Chuyển các file `.html` trong `index.html` và `pages/` vào thư mục `templates/`.
-2. Chuyển toàn bộ thư mục `assets/` vào `static/`.
-3. Tách các thành phần Header và Footer thành template Jinja2 `base.html`.
-4. Thay thế `CookMateStorage` bằng các lệnh gọi API `fetch('/api/...')` tương ứng đến các Flask route.
-5. Mã nguồn hiện tại được phân chia rõ ràng giữa tầng dữ liệu, logic giao diện và trình bày, đảm bảo việc tích hợp Backend diễn ra nhanh chóng mà không cần viết lại giao diện.
+### A. Kiến trúc Backend & Cơ sở dữ liệu quan hệ (`app.py`, `backend/`, `database/cookmate.db`)
+- **`app.py`**: Ứng dụng Python Flask phục vụ đồng thời toàn bộ 21 trang HTML tĩnh (`index.html`, `pages/**`, `assets/**`) mà không làm thay đổi cấu trúc thư mục gốc và hệ thống RESTful API (`/api/...`).
+- **`backend/database.py`**: Tầng truy xuất dữ liệu SQLite3 (`database/cookmate.db`) triển khai đầy đủ 8 thực thể quan hệ:
+  1. `users` (`NGUOIDUNG`) — Mã hóa mật khẩu chuẩn `PBKDF2-SHA256`, quản lý trạng thái khóa/mở khóa (`active` / `inactive`).
+  2. `categories` (`DANHMUC`) — 8 danh mục ẩm thực kèm tự động đếm số công thức đã duyệt.
+  3. `ingredients` (`NGUYENLIEU`) — 30 nguyên liệu chuẩn kèm chỉ số dinh dưỡng trên 100g.
+  4. `recipes` (`CONGTHUC`) — 16 công thức mẫu cùng luồng kiểm duyệt 3 trạng thái (`pending`, `approved`, `rejected`).
+  5. `recipe_ingredients` (`CONGTHUC_NGUYENLIEU`) — Định lượng nguyên liệu theo từng công thức.
+  6. `recipe_steps` (`BUOCLAM`) — Các bước chế biến tuần tự.
+  7. `comments` (`BINHLUAN`) — Đánh giá và bình luận của người dùng, tự động tính lại điểm trung bình.
+  8. `favorites` (`YEUTHICH`) — Danh sách công thức yêu thích theo từng người dùng.
+- **`backend/seed.py`**: Dữ liệu khởi tạo tự động cho toàn bộ 8 bảng ngay khi chạy lần đầu.
+- **`backend/flask_compat.py`**: Tầng tương thích thông minh hỗ trợ chạy bằng thư viện `Flask` gốc (nếu đã cài) hoặc tự động dùng WSGI/HTTP + `PBKDF2-SHA256` từ thư viện chuẩn Python 3.12 khi chạy ở môi trường offline.
+
+### B. Hoàn thiện 5 Edge Cases trên Frontend & Đồng bộ Dual-Mode (`assets/js/storage.js`, `assets/js/auth-ui.js`)
+1. **Chỉnh sửa & xóa công thức tĩnh (ID 1–16):** Cho phép cập nhật hoặc xóa cả công thức gốc lẫn công thức người dùng tạo qua `cookmate_deleted_recipes` và ghi đè trong `cookmate_user_recipes`.
+2. **Xóa bình luận gốc & bình luận người dùng:** Lưu vết `cookmate_deleted_comments` trong `CookMateStorage.deleteComment()` và đồng bộ hiển thị trên cả `pages/recipe-detail.html` lẫn `pages/admin/comments.html`.
+3. **Chặn đăng nhập khi tài khoản bị tạm khóa (`UC20`):** Kiểm tra `user.status === 'inactive'` trong `assets/js/auth-ui.js` và API `POST /api/auth/login` (trả về HTTP `403` khi tài khoản bị khóa).
+4. **Tự động ước tính dinh dưỡng (`UC06-B`):** Bổ sung `CookMateStorage.estimateNutrition(ingredients, servings)` và endpoint `POST /api/nutrition/estimate` tự động tính Calo, Protein, Fat, Carbs, Fiber khi tạo/sửa công thức.
+5. **Hỗ trợ bộ lọc URL `?filter=featured` trên `pages/recipes.html`:** Đồng bộ tham số `filter`, `tab`, `sort` trên trang Khám phá công thức.

@@ -250,7 +250,27 @@ var CookMateAuthUI = (function () {
           });
 
           if (user) {
+            if (user.status === 'inactive') {
+              if (submitBtn) {
+                submitBtn.classList.remove('is-loading');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>Đăng nhập</span>';
+              }
+              if (emailInput) emailInput.classList.add('input-error');
+              if (emailErr) {
+                emailErr.textContent = 'Tài khoản của bạn đã bị tạm khóa bởi Quản trị viên.';
+                emailErr.classList.add('is-visible');
+              }
+              if (typeof CookMateUI !== 'undefined') {
+                CookMateUI.showToast('Tài khoản của bạn đã bị tạm khóa bởi Quản trị viên.', 'error');
+              }
+              return;
+            }
+
             CookMateStorage.setCurrentUser(user);
+            if (typeof CookMateStorage._apiRequest === 'function') {
+              CookMateStorage._apiRequest('POST', '/api/auth/login', { email: email, password: password });
+            }
             if (typeof CookMateUI !== 'undefined') {
               CookMateUI.showToast('Đăng nhập thành công! Chào mừng ' + user.name, 'success');
             }

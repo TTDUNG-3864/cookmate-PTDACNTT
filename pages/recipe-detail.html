@@ -541,8 +541,16 @@
       var countEl = document.getElementById('commentCount');
       if (!list || !currentRecipe) return;
 
-      var staticComments = (currentRecipe.comments || []).map(function(c) {
-        return Object.assign({}, c, { recipeId: currentRecipe.id, isStatic: true });
+      var deletedCommentIds = CookMateStorage.getDeletedCommentIds ? CookMateStorage.getDeletedCommentIds() : [];
+      var staticComments = (currentRecipe.comments || []).filter(function(c) {
+        return !deletedCommentIds.some(function(delId) { return delId == c.id; });
+      }).map(function(c) {
+        return Object.assign({}, c, {
+          recipeId: currentRecipe.id,
+          isStatic: true,
+          content: c.content || c.comment || '',
+          createdAt: c.createdAt || c.date || ''
+        });
       });
       var userComments = CookMateStorage.getCommentsForRecipe(currentRecipe.id);
       var all = staticComments.concat(userComments);
@@ -558,7 +566,8 @@
 
       list.innerHTML = all.map(function(c) {
         var isOwner = currentUser && (currentUser.id === c.userId || currentUser.role === 'admin');
-        var dateFormatted = timeAgo(c.createdAt);
+        var dateFormatted = timeAgo(c.createdAt || c.date);
+        var textContent = c.content || c.comment || '';
 
         return `
           <div class="comment-item" id="comment-${c.id}">
@@ -567,13 +576,13 @@
               <div class="comment-meta">
                 <span class="comment-author">${escapeHtml(c.userName || 'Người dùng')}</span>
                 <span class="comment-date"><i class="fa-regular fa-clock"></i> ${dateFormatted}</span>
-                ${isOwner && !c.isStatic ? `
+                ${isOwner ? `
                   <button class="btn-link text-danger text-xs ml-auto" onclick="deleteUserComment(${c.id})" title="Xóa bình luận">
                     <i class="fa-solid fa-trash"></i> Xóa
                   </button>
                 ` : ''}
               </div>
-              <p class="comment-text">${escapeHtml(c.content)}</p>
+              <p class="comment-text">${escapeHtml(textContent)}</p>
             </div>
           </div>
         `;

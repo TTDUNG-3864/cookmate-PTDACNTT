@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}CookMate — Khám phá hương vị ẩm thực mỗi ngày{% endblock %}</title>
+  <link rel="stylesheet" href="/assets/css/variables.css" />
+  <link rel="stylesheet" href="/assets/css/reset.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/animations.css" />
+  <link rel="stylesheet" href="/assets/css/responsive.css" />
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <header class="header" id="main-header"></header>
+  <main id="main-content">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer" id="main-footer"></footer>
+
+  <script src="/assets/js/data/categories.js"></script>
+  <script src="/assets/js/data/ingredients.js"></script>
+  <script src="/assets/js/data/users.js"></script>
+  <script src="/assets/js/data/recipes.js"></script>
+  <script src="/assets/js/storage.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script src="/assets/js/components.js"></script>
+  <script src="/assets/js/navigation.js"></script>
+  <script src="/assets/js/auth-ui.js"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
