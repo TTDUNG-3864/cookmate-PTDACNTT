@@ -1,38 +1,31 @@
 # -*- coding: utf-8 -*-
 """
-CookMate ChefBot — Trợ Lý AI Chuyên Biệt Về Món Ăn & Kỹ Thuật Nấu Nướng
-=======================================================================
-Chỉ tập trung giải đáp chuyên sâu về ẩm thực & món ăn, tích hợp Nhóm 1 & Nhóm 2:
-
-Nhóm 1 — Giải đáp Món ăn, Nguyên liệu sẵn có, Định lượng & Dinh dưỡng (CSDL CookMate):
-  1. "Có những nguyên liệu này thì nấu được món gì?" (Đối chiếu nguyên liệu tủ lạnh với CSDL)
-  2. Tư vấn món ăn & thực đơn theo Calo, Đạm (Protein), Chất béo, Tinh bột, Chất xơ (UC06-B)
-  3. Tính toán & quy đổi định lượng nguyên liệu theo số người ăn (UC06-A)
-
-Nhóm 2 — Trợ lý Đứng bếp, Xử lý sự cố món ăn & Thay thế nguyên liệu:
-  4. Xử lý sự cố khi nấu ăn ("Cấp cứu món ăn": món bị cháy/khê, mặn, nhão, sống, đục nước, dai, tanh, cay, chua, dính chảo...)
-  5. Tư vấn thay thế nguyên liệu khi thiếu đồ kèm tỷ lệ quy đổi chuẩn
-  6. Giải đáp chi tiết cách nấu, các bước thực hiện và bí quyết theo món ăn đang xem
-
-Từ chối lịch sự mọi câu hỏi ngoài phạm vi ẩm thực / nấu ăn.
+CookMate ChefBot — Trợ Lý AI Chuyên Sâu Giải Đáp Món Ăn, Sự Cố Bếp & Nguyên Liệu
+=================================================================================
+Phân tích chính xác ý định câu hỏi tiếng Việt (có dấu & không dấu) của người dùng:
+  1. Xử lý sự cố món ăn & Sơ chế khử mùi (Cháy/khét, thịt gà/heo/bò bị hôi, cá tanh,
+     canh/kho bị mặn, cơm nhão/sống/khê, nước đục, thịt dai/khô, quá cay/chua/đắng, dính chảo...)
+  2. Thay thế nguyên liệu khi thiếu (Xì dầu/nước tương, nước mắm, dầu hào, cốt dừa, bột năng,
+     rượu nấu ăn, hạt nêm, đường phèn, chanh/giấm/me, hành/tỏi/gừng/sả, bơ/sữa, màu điều...
+     + Tự động bóc tách tên nguyên liệu người dùng vừa nhập để trả lời đúng trọng tâm)
+  3. Có nguyên liệu này nấu món gì? (Đối chiếu CSDL CookMate + Gợi ý món ăn gia đình sát thực tế)
+  4. Quy đổi khẩu phần ăn (UC06-A) & Tư vấn Calo / Dinh dưỡng (UC06-B)
+  5. Hướng dẫn cách nấu / ướp / luộc / kho chi tiết cho từng món ăn
 """
 
+import json
+import os
 import re
-from typing import Any, Dict, List, Optional
+import urllib.request
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend import database as db
 
-
-# ============================================================
-# DANH MỤC TỪ KHÓA NGOÀI PHẠM VI ẨM THỰC (OFF-TOPIC GUARDRAIL)
-# ============================================================
 
 OFF_TOPIC_KEYWORDS = [
     "lap trinh",
     "code python",
     "javascript",
-    "html",
-    "css",
     "toan hoc",
     "giai phuong trinh",
     "dao ham",
@@ -46,211 +39,305 @@ OFF_TOPIC_KEYWORDS = [
     "world cup",
     "ngoai hang anh",
     "viet bai van",
-    "lam tho",
-    "dich tieng anh",
     "cai win",
     "sua may tinh",
 ]
 
 
 # ============================================================
-# CƠ SỞ TRI THỨC: THAY THẾ NGUYÊN LIỆU KHI THIẾU (NHÓM 2)
+# 1. CƠ SỞ TRI THỨC XỬ LÝ SỰ CỐ & SƠ CHẾ KHỬ MÙI (NHÓM 2)
 # ============================================================
 
-SUBSTITUTION_KNOWLEDGE = [
+RESCUE_RULES = [
     {
-        "keywords": ["nước cốt dừa", "nuoc cot dua", "cốt dừa", "cot dua"],
-        "ingredient": "Nước cốt dừa",
-        "substitutes": [
-            "**Sữa tươi không đường + Bơ lạt (Khuyên dùng):** Pha `200ml sữa tươi không đường` với `15g bơ lạt` đun chảy — tạo độ béo ngậy và sánh đạt 85–90% so với cốt dừa tươi, rất hợp cho món cà ri, kho, bánh.",
-            "**Sữa đặc + Sữa tươi:** Pha `180ml sữa tươi + 2 muỗng canh sữa đặc` khi nấu các món chè hoặc tráng miệng.",
-            "**Kem tươi (Whipping Cream / Cooking Cream):** Thay thế theo tỷ lệ `1:1` cho các món súp, sốt kem hoặc cà ri.",
+        "id": "poultry_odor",
+        "patterns": [
+            r"\b(ga|uc ga|dui ga|vit|ngan)\b.*\b(hoi|tanh|mui|so che|lam sach)\b",
+            r"\b(hoi|tanh|mui long|khu mui)\b.*\b(ga|uc ga|dui ga|vit|ngan)\b",
+        ],
+        "title": "Thịt gà / Vịt bị hôi hoặc có mùi lông",
+        "solutions": [
+            "**Cách 1 — Chà Gừng đập dập + Muối hạt + Chanh/Giấm (hoặc Rượu trắng):** Đập dập 1 củ gừng tươi, trộn với 1 muỗng muối hạt và nửa quả chanh (hoặc 2 muỗng rượu trắng/giấm), chà xát kỹ khắp bề mặt thịt gà trong 3–5 phút rồi xả sạch bằng nước lạnh — khử sạch 95% mùi hôi.",
+            "**Cách 2 — Cắt bỏ tuyến dầu ở phao câu & rửa máu bầm:** Nếu làm gà nguyên con, bắt buộc cắt bỏ 2 u tuyến bã nhờn ở phao câu và cạo sạch phần máu đông sát xương sống (đây là nguyên nhân chính gây mùi hôi).",
+            "**Cách 3 — Chần sơ với hành gừng:** Đun sôi nước với **vài lát gừng + 1 củ hành tím đập dập + chút muối**, chần thịt gà 1–2 phút cho săn và ra hết bọt bẩn trước khi đem kho, luộc hoặc nấu canh.",
+            "**Mẹo khi chế biến:** Thêm **lá chanh thái chỉ, sả đập dập hoặc gừng non** vào món ăn sẽ giúp thịt gà dậy mùi thơm đặc trưng.",
         ],
     },
     {
-        "keywords": ["nước mắm", "nuoc mam", "mắm chay", "mam chay"],
-        "ingredient": "Nước mắm (hoặc khi ăn chay)",
-        "substitutes": [
-            "**Nước tương (Xì dầu) + Muối biển:** Thay `1 muỗng canh nước mắm` bằng `1 muỗng canh nước tương + 1/4 muỗng cà phê muối` để giữ độ mặn đằm mà không bị nhạt.",
-            "**Nước mắm chay từ dứa (thơm) hoặc nấm:** Dùng tỷ lệ `1:1` cho các món kho, chấm hoặc canh chay.",
-            "**Muối + Bột nêm nấm hương:** Dùng khi nấu nước dùng canh/phở để nước trong và không bị sẫm màu.",
+        "id": "pork_beef_odor",
+        "patterns": [
+            r"\b(heo|lon|suon|ba chi|bo|long|da day)\b.*\b(hoi|tanh|mui|gay|so che|lam sach)\b",
+            r"\b(hoi|mui hoi|khu mui)\b.*\b(thit|heo|lon|suon|bo|long)\b",
+            r"\b(bi hoi|mui hoi|khu mui hoi)\b",
+        ],
+        "title": "Thịt heo / Thịt bò / Sườn bị hôi khi sơ chế hoặc chế biến",
+        "solutions": [
+            "**Với Thịt heo / Sườn heo bị hôi:**\n"
+            "  • Ngâm thịt trong **nước muối loãng ấm pha vài lát gừng và 1 muỗng giấm/rượu trắng** khoảng 10 phút.\n"
+            "  • Bỏ thịt vào nồi từ lúc **nước còn lạnh** (kèm 1 củ hành tím đập dập), đun sôi từ từ để bọt bẩn và mùi hôi tiết hết ra ngoài, sau đó đổ bỏ nước đầu và rửa lại bằng nước ấm.",
+            "**Với Thịt bò (khử mùi gây):** Chà nhẹ miếng gừng nướng thơm lên bề mặt thịt, không rửa thịt bò quá lâu dưới vòi nước mạnh để tránh mất vị ngọt; khi ướp thêm tỏi băm, gừng và chút dầu mè.",
+            "**Với Lòng / Dạ dày:** Bóp kỹ 2 lần với **bột mì (để hút sạch nhớt) + muối hạt + chanh/giấm**, sau đó chần qua nước sôi có gừng và sả.",
         ],
     },
     {
-        "keywords": ["bột năng", "bot nang", "bột bắp", "bot bap", "bột sắn", "bot san", "tạo sánh", "tao sanh"],
-        "ingredient": "Bột năng / Bột bắp (Tạo độ sánh)",
-        "substitutes": [
-            "**Bột bắp ↔ Bột năng:** Thay thế trực tiếp tỷ lệ `1:1` (hoà tan với chút nước lạnh trước khi đổ từ từ vào nồi đang sôi).",
-            "**Bột sắn dây:** Thay tỷ lệ `1:1`, cực kỳ hợp cho các món chè và súp cần độ trong mát.",
-            "**Bột mì đa dụng:** Dùng lượng gấp đôi (`2 muỗng bột mì = 1 muỗng bột năng`), thích hợp làm sánh sốt các món xào/âu.",
+        "id": "fish_seafood_odor",
+        "patterns": [
+            r"\b(tanh|bi tanh|mui tanh|ca tanh|tom tanh|hai san tanh|bi nhot|sach nhot)\b",
+            r"\b(ca|tom|muc|hai san|luon|ech)\b.*\b(tanh|hoi|nhot|khu mui|so che)\b",
+        ],
+        "title": "Cá / Tôm / Hải sản bị tanh hoặc nhiều nhớt",
+        "solutions": [
+            "**Khử nhớt & mùi tanh khi sơ chế:**\n"
+            "  • **Nước vo gạo hoặc Muối + Chanh/Giấm:** Ngâm cá trong nước vo gạo 10 phút, hoặc chà xát muối hạt với nước cốt chanh/giấm (hoặc tro bếp/bột mì đối với cá da trơn).\n"
+            "  • **Làm sạch màng đen trong bụng cá:** Cạo thật sạch lớp màng đen trong khoang bụng và cục máu đông dọc sống lưng cá — đây là nơi tích tụ mùi tanh nặng nhất.",
+            "**Xử lý khi món cá đang nấu bị tanh:** Cho ngay vào nồi **vài lát gừng tươi, sả đập dập, 1 muỗng rượu trắng**, hoặc **2–3 muỗng nước chè xanh đặc / cà chua / dứa (thơm)** và mở nắp nồi 2 phút để hơi tanh bay đi.",
         ],
     },
     {
-        "keywords": ["rượu nấu ăn", "ruou nau an", "rượu trắng", "ruou trang", "rượu mirin", "mirin"],
-        "ingredient": "Rượu nấu ăn / Rượu trắng khử mùi",
-        "substitutes": [
-            "**Gừng tươi đập dập + Giấm gạo:** Chà xát hoặc cho vào nước chần thịt/cá theo tỷ lệ `1 nhánh gừng + 1 muỗng canh giấm` giúp khử sạch mùi hôi tanh.",
-            "**Nước cốt chanh + Muối hạt:** Rất hiệu quả khi sơ chế gà, vịt, hải sản và lòng.",
-            "**Nước ép táo + 1/2 muỗng cà phê đường:** Thay thế cho rượu ngọt Mirin trong các món sốt Teriyaki hoặc kho.",
+        "id": "burned_food",
+        "patterns": [
+            r"\b(bi chay|chay noi|chay khet|bi khet|bi khe|com khe|khet|chay day)\b",
+            r"\b(lam mon an|mon an|thit kho|ca kho|nau|com)\b.*\b(chay|khet|khe)\b",
+        ],
+        "title": "Món ăn / Nồi kho / Cơm bị cháy hoặc có mùi khê khét",
+        "solutions": [
+            "**Bước 1 — Tắt bếp ngay & TUYỆT ĐỐI KHÔNG ĐẢO/KHUẤY:** Đừng dùng đũa cạo hay đảo phần đáy nồi bị cháy vì sẽ làm cặn đen và vị đắng khét lan ra toàn bộ món ăn.",
+            "**Bước 2 — Chuyển ngay phần chưa cháy sang nồi sạch mới:** Nhẹ nhàng gắp phần thức ăn ở phía trên (chưa bén lửa) sang một chiếc nồi khác, bỏ hoàn toàn lớp đáy cháy.",
+            "**Bước 3 — Khử sạch mùi khê khét trên thức ăn:**\n"
+            "  • *Nếu là Cơm bị khê:* Đặt ngay **1–2 lát bánh mì sandwich**, hoặc **vài gốc hành lá tươi**, hoặc **1 chiếc bát nhỏ đựng nước lạnh** lên mặt cơm, đậy nắp 5–10 phút — mùi khê sẽ bị hút sạch!\n"
+            "  • *Nếu là Thịt kho / Cá kho bị cháy sốt:* Rửa sơ miếng thịt qua nước ấm nếu dính cặn đen, sau đó pha nước sốt mới (nước dừa tươi/nước lọc + nước mắm + đường + gừng/hành tím) đun liu riu 5–7 phút.",
+            "**Bước 4 — Mẹo làm sạch nồi bị cháy không cần cọ mạnh:** Đổ nước ngập vết cháy, cho `2 muỗng canh Baking Soda + 3 muỗng giấm trắng` đun sôi 5 phút rồi ngâm 15 phút, lớp cháy sẽ tự bong tróc!",
         ],
     },
     {
-        "keywords": ["đường phèn", "duong phen", "đường nâu", "duong nau", "đường thốt nốt", "duong thot not", "mật ong", "mat ong"],
-        "ingredient": "Đường phèn / Đường nâu / Mật ong",
-        "substitutes": [
-            "**Thay Đường phèn bằng Đường cát trắng:** Dùng tỷ lệ `100g đường phèn = 90g đường cát trắng` (vì đường cát ngọt đậm hơn).",
-            "**Thay Đường nâu bằng Đường trắng + Mật mía/Mật ong:** Trộn `1 muỗng canh đường trắng + 1/2 muỗng cà phê mật ong` cho các món ướp nướng.",
-            "**Thay Mật ong khi ướp nướng:** Dùng `nước đường thắng nhẹ` hoặc `sữa đặc` giúp thịt nướng vẫn mềm và lên màu vàng óng.",
+        "id": "too_salty",
+        "patterns": [
+            r"\b(bi man|man qua|chua man|qua man|man chát)\b",
+            r"\b(canh|kho|xao|mon|nuoc dung|sup)\b.*\b(man)\b",
+        ],
+        "title": "Món canh / Món kho / Món xào bị mặn quá",
+        "solutions": [
+            "**Cách 1 — Thả khoai tây sống cắt lát (Hiệu quả nhất):** Gọt vỏ `1 củ khoai tây sống`, thái lát dày 1cm thả vào nồi canh hoặc nồi kho đun nhỏ lửa 10 phút rồi vớt ra — khoai tây hút muối thừa cực nhạy mà không làm hỏng vị món ăn.",
+            "**Cách 2 — Với món Canh / Súp:** Châm thêm nước sôi, bổ sung nguyên liệu nhạt như **đậu hũ non, cà chua, nấm, bầu/bí** để trung hòa độ mặn; có thể vắt vài giọt cốt chanh để dịu vị gắt.",
+            "**Cách 3 — Với món Thịt kho / Cá kho:** Thêm **nước dừa tươi** (hoặc nước sôi) + **1 muỗng cà phê đường phèn / mật ong** rồi đun nhỏ lửa cho vị dịu lại.",
         ],
     },
     {
-        "keywords": ["chanh", "giấm", "giam", "me chua", "quất", "tắc", "chất chua"],
-        "ingredient": "Chanh / Giấm / Me chua",
-        "substitutes": [
-            "**Chanh ↔ Quất (Tắc):** `2 quả tắc = 1 quả chanh vừa`, mùi tinh dầu tắc rất hợp khi pha nước chấm hoặc bún/phở.",
-            "**Chanh ↔ Giấm gạo / Giấm táo:** `1 muỗng canh giấm = 1 muỗng canh nước cốt chanh`.",
-            "**Thay Me chua khi nấu canh chua:** Dùng **dứa (thơm) chín**, **cà chua**, **khế chua** hoặc **sấu/dọc mùng** tạo vị chua thanh tự nhiên.",
+        "id": "rice_mushy_or_raw",
+        "patterns": [
+            r"\b(com nhao|bi nhao|nhao qua|com uot|com song|bi song|com suong|bi suong)\b",
+        ],
+        "title": "Cơm bị nhão (ướt) hoặc bị sống / sượng",
+        "solutions": [
+            "**Khi cơm bị nhão / ướt:** Mở nắp nồi 2 phút cho thoát bớt hơi nước, đặt **1–2 lát bánh mì ruột trắng** lên mặt cơm rồi đậy nắp để chế độ `Warm` 10 phút — bánh mì sẽ hút hết nước thừa giúp hạt cơm ráo tơi.",
+            "**Khi cơm bị sống / sượng:** Xới tơi cơm, dùng đũa chọc vài lỗ thoáng từ mặt xuống đáy nồi, rưới đều hỗn hợp `2 muỗng canh nước ấm + 1 muỗng cà phê rượu trắng` (tỷ lệ 1 muỗng rượu cho mỗi 500g gạo) rồi bấm nút `Cook` lại. Rượu sẽ bay hơi hết không để lại mùi và giúp cơm chín dẻo đều.",
         ],
     },
     {
-        "keywords": ["dầu hào", "dau hao", "bơ lạt", "bo lat"],
-        "ingredient": "Dầu hào / Bơ lạt",
-        "substitutes": [
-            "**Thay 1 muỗng canh Dầu hào:** Pha `1 muỗng canh nước tương + 1/2 muỗng cà phê đường + 1/4 muỗng cà phê bột năng`.",
-            "**Thay Bơ lạt:** Dùng `Dầu ô-liu` hoặc `Dầu thực vật` theo tỷ lệ `10g bơ = 8ml dầu ăn`.",
+        "id": "cloudy_broth",
+        "patterns": [
+            r"\b(bi duc|nuoc duc|nuoc dung duc|nuoc pho duc|nuoc leo duc|lam trong nuoc)\b",
+        ],
+        "title": "Nước dùng Phở / Bún / Canh hầm xương bị đục",
+        "solutions": [
+            "**Tuyệt chiêu lòng trắng trứng gà:** Đánh tan `1 lòng trắng trứng` với chút nước nguội, đổ vào nồi nước dùng đang ấm và khuấy đều. Khi nước sôi lăn tăn, lòng trắng kết tủa sẽ cuốn sạch toàn bộ vẩn đục nổi lên mặt — chỉ cần vớt bỏ hoặc lọc qua rây là nước dùng trong veo!",
+            "**Thả vài lát khoai tây sống hoặc củ cải trắng:** Hút cặn lơ lửng và giúp nước ngọt thanh hơn.",
+            "**Lưu ý khi ninh xương:** Luôn chần xương 3 phút với nước sôi + muối + gừng, rửa sạch máu bầm rồi mới ninh lửa nhỏ và **mở hé nắp nồi**.",
         ],
     },
     {
-        "keywords": ["hành tím", "hanh tim", "hành khô", "hanh kho", "tỏi", "toi", "hành tây", "hanh tay"],
-        "ingredient": "Hành tím / Tỏi / Hành tây",
-        "substitutes": [
-            "**Thay Hành tím (Hành khô):** Dùng **phần đầu trắng của hành lá** hoặc **hành tây băm nhỏ** (phi thơm tương tự hành tím).",
-            "**Thay Hành tây:** Dùng **cần tây**, **tỏi tây (hành boa-rô)** hoặc **củ cải trắng** (nếu hầm lấy nước ngọt).",
+        "id": "tough_dry_meat",
+        "patterns": [
+            r"\b(bi dai|thit dai|bo dai|bi kho|uc ga kho|thit cung|bi cung|lau mem)\b",
+        ],
+        "title": "Thịt bò / Ức gà / Thịt hầm bị dai hoặc khô bã",
+        "solutions": [
+            "**Khi món hầm đang bị dai:** Cho vào nồi `vài miếng dứa (thơm) chín`, `1 miếng đu đủ xanh nhỏ` hoặc `1 muỗng cà phê nước cốt chanh` — enzyme tự nhiên sẽ làm mềm thớ thịt nhanh gấp đôi.",
+            "**Mẹo chế biến Ức gà mềm mọng không bị khô:** Ngâm ức gà trong nước muối loãng 15 phút trước khi nấu (Brining), hoặc ướp với **1 muỗng sữa tươi / sữa chua không đường + 1/2 muỗng bột bắp + chút dầu ăn**; áp chảo lửa vừa mỗi mặt đúng 3–4 phút rồi đậy nắp nghỉ 3 phút.",
+            "**Mẹo xào Thịt bò mềm tan:** Luôn thái ngang thớ, ướp với **dầu ăn + chút bột năng + tỏi**, không ướp muối trước và xào nhanh trên lửa thật lớn.",
         ],
     },
     {
-        "keywords": ["sữa tươi", "sua tuoi", "kem tươi", "whipping cream", "sữa đặc", "sua dac"],
-        "ingredient": "Sữa tươi / Kem tươi (Whipping Cream)",
-        "substitutes": [
-            "**Thay Kem tươi (Whipping Cream) trong súp/sốt:** Pha `160ml sữa tươi không đường + 40g bơ lạt đun chảy + 1 muỗng cà phê bột mì`.",
-            "**Thay Sữa tươi:** Pha loãng `sữa đặc với nước ấm theo tỷ lệ 1:4` (nhớ giảm bớt lượng đường trong công thức).",
+        "id": "too_spicy_sour_sweet_bitter",
+        "patterns": [
+            r"\b(bi cay|cay qua|qua cay|bi chua|chua qua|qua chua|bi ngot|ngot qua|qua ngot|bi dang|dang qua|canh kho qua)\b",
+        ],
+        "title": "Món ăn bị quá cay, quá chua, quá ngọt hoặc bị đắng",
+        "solutions": [
+            "**Chữa món quá cay:** Thêm **nước cốt dừa, sữa tươi không đường, bơ lạt** hoặc **1 muỗng đường + cà chua** (chất béo hòa tan chất cay Capsaicin ngay lập tức).",
+            "**Chữa món quá chua:** Thêm **1/2 – 1 muỗng cà phê đường phèn** hoặc **1 nhúm rất nhỏ muối nở (Baking Soda)** khuấy đều để trung hòa axit chua.",
+            "**Chữa món quá ngọt:** Thêm **vài giọt nước cốt chanh / giấm gạo** và một chút nước mắm để cân bằng vị.",
+            "**Giảm vị đắng (khổ qua / măng / cùi bưởi):** Cạo sạch lớp màng trắng bên trong khổ qua, bóp muối xả nước lạnh hoặc chần sơ qua nước sôi có pha chút muối và đường trước khi nấu.",
         ],
     },
     {
-        "keywords": ["màu điều", "mau dieu", "nước hàng", "nuoc hang", "nước màu", "bột nghệ", "bot nghe"],
-        "ingredient": "Nước màu (Nước hàng) / Dầu màu điều / Bột nghệ",
-        "substitutes": [
-            "**Thay Nước màu kho thịt/cá:** Tự thắng nhanh `2 muỗng canh đường + 1 muỗng canh nước` trên chảo đến khi chuyển màu cánh gián, hoặc dùng `nước tương đen (hắc xì dầu)`.",
-            "**Thay Dầu màu điều:** Phi thơm `gấc chín`, `bột ớt Paprika` hoặc `cà chua băm nhuyễn` với dầu ăn để lấy màu đỏ cam tự nhiên.",
+        "id": "sticking_splattering_soggy",
+        "patterns": [
+            r"\b(dinh chao|ban dau|vang dau|bi nat|khong gion|bi iu|rau bi den|rau bi tham|rau bi vang|von cuc)\b",
         ],
-    },
-    {
-        "keywords": ["trứng gà", "trung ga", "trứng", "trung"],
-        "ingredient": "Trứng gà (trong tẩm bột / làm bánh / kết dính)",
-        "substitutes": [
-            "**Khi trộn chả / mọc cần độ kết dính:** Thay 1 quả trứng bằng `1 muỗng canh bột năng` hoặc `bột bắp`.",
-            "**Khi chiên tẩm bột:** Pha bột chiên giòn với `nước cốt dừa` hoặc `bia lạnh` giúp vỏ giòn rụm vàng ươm không cần trứng.",
+        "title": "Chiên rán bị dính chảo / bắn dầu / ỉu hoặc Rau luộc bị thâm",
+        "solutions": [
+            "**Chiên cá / đậu không dính chảo & không bắn dầu:** Thấm thật khô nước trên thực phẩm; đun nóng chảo trước rồi mới đổ dầu, rắc vào dầu **1/4 muỗng cà phê bột mì (hoặc vài hạt muối)** và chà 1 lát gừng tươi lên mặt chảo trước khi cho cá vào.",
+            "**Giữ đồ chiên giòn lâu không bị ỉu:** Pha thêm vài giọt nước cốt chanh hoặc 1 muỗng bia vào bột chiên, và **chiên 2 lửa** (lần 1 chín tới, lần 2 dầu nóng già trước khi ăn).",
+            "**Giữ rau luộc xanh mướt:** Nước phải sôi bùng mới thả rau, cho `1/2 muỗng muối + vài giọt dầu ăn`, luộc mở vung trên lửa lớn rồi vớt ra đĩa thoáng.",
         ],
     },
 ]
 
 
 # ============================================================
-# CƠ SỞ TRI THỨC: XỬ LÝ SỰ CỐ MÓN ĂN ("CẤP CỨU NHÀ BẾP" - NHÓM 2)
+# 2. CƠ SỞ TRI THỨC THAY THẾ NGUYÊN LIỆU CHI TIẾT (35+ LOẠI)
 # ============================================================
 
-KITCHEN_RESCUE_KNOWLEDGE = [
+SUBSTITUTION_CATALOG = [
     {
-        "keywords": [
-            "bị cháy",
-            "bi chay",
-            "cháy nồi",
-            "chay noi",
-            "cháy khét",
-            "chay khet",
-            "bị khét",
-            "bi khet",
-            "bị khê",
-            "bi khe",
-            "cơm khê",
-            "com khe",
-            "kho bị cháy",
-        ],
-        "problem": "Món ăn / Nồi kho / Cơm bị cháy hoặc có mùi khê khét",
-        "solutions": [
-            "**Bước 1 — Tắt bếp ngay & TUYỆT ĐỐI KHÔNG ĐẢO/KHUẤY:** Đừng cạo hay đảo đáy nồi vì sẽ làm phần cháy đen và vị đắng lan ra toàn bộ món ăn.",
-            "**Bước 2 — Gắp phần chưa cháy sang nồi sạch mới:** Nhẹ nhàng múc phần thịt/cá/thức ăn ở lớp trên (chưa bị bén lửa) sang một chiếc nồi mới.",
-            "**Bước 3 — Khử mùi khê khét tức thì:**\n"
-            "  • *Với cơm bị khê:* Đặt ngay **1–2 lát bánh mì sandwich**, hoặc **1 bát nhỏ nước lạnh**, hoặc **vài gốc hành lá tươi** lên mặt cơm rồi đậy nắp 5–10 phút — mùi khê sẽ bị hút sạch.\n"
-            "  • *Với món thịt/cá kho bị cháy sốt:* Bỏ phần nước sốt cũ bị khét, pha lại nước sốt mới (nước dừa tươi/nước lọc + chút nước mắm + đường + vài lát gừng/hành tím) đun liu riu 5 phút để lấy lại hương thơm.",
-            "**Bước 4 — Mẹo cọ nồi bị cháy không tốn sức:** Đổ nước ngập đáy nồi cháy, cho `2 muỗng canh muối nở (Baking Soda) + 3 muỗng giấm trắng` (hoặc vài lát chanh), đun sôi 5 phút rồi ngâm 20 phút, mảng cháy sẽ tự bong ra dễ dàng!",
+        "names": ["xì dầu", "xi dau", "nước tương", "nuoc tuong", "hắc xì dầu", "hac xi dau"],
+        "label": "Xì dầu (Nước tương)",
+        "substitutes": [
+            "**Khi dùng để ướp thịt hoặc xào nấu:** Thay `1 muỗng canh xì dầu` bằng **`2/3 muỗng canh nước mắm + 1/3 muỗng cà phê đường + vài giọt nước màu (hoặc 1/2 muỗng dầu hào)`** để giữ trọn vị mặn dịu và màu nâu óng đẹp mắt.",
+            "**Khi dùng để pha nước chấm:** Bạn có thể chuyển sang pha **nước mắm chua ngọt** (`1 mắm : 1 đường : 1 cốt chanh : 4 nước ấm + tỏi ớt`) hoặc dùng **dầu hào pha loãng với chút nước ấm, đường và ớt tươi**.",
+            "**Khi nấu món chay (không có xì dầu):** Thay bằng **`muối biển + chút đường nâu (hoặc nước hàng thắng nhẹ) + hạt nêm nấm hương`**.",
         ],
     },
     {
-        "keywords": ["bị mặn", "bi man", "mặn quá", "man qua", "chữa mặn", "chua man", "quá mặn"],
-        "problem": "Món canh / Món kho / Món xào bị mặn quá",
-        "solutions": [
-            "**Mẹo khoai tây sống (Hiệu quả nhất):** Gọt vỏ `1 củ khoai tây sống`, cắt lát dày khoảng 1cm thả vào nồi canh hoặc nồi kho, đun nhỏ lửa 10 phút rồi vớt ra — khoai tây sẽ hút lượng muối thừa cực nhạy mà không làm đổi vị món ăn!",
-            "**Với món canh/súp:** Châm thêm nước sôi, thả thêm **cà chua**, **đậu hũ non** hoặc **nấm/rau củ** để giãn độ mặn; có thể vắt vài giọt cốt chanh (vị chua dịu làm giảm cảm giác mặn ở đầu lưỡi).",
-            "**Với món thịt/cá kho:** Thêm `nước dừa tươi` (hoặc nước lọc) + `1 muỗng cà phê đường phèn/mật ong` đun lại cho cân bằng vị mặn – ngọt.",
+        "names": ["nước mắm", "nuoc mam", "mắm", "mam chay"],
+        "label": "Nước mắm",
+        "substitutes": [
+            "**Thay bằng Xì dầu (Nước tương) + Muối:** Pha **`1 muỗng canh xì dầu + 1/4 muỗng cà phê muối`** cho mỗi muỗng canh nước mắm để món ăn giữ được độ đậm đà.",
+            "**Khi nấu canh / súp:** Thay bằng **`Muối hạt + Hạt nêm (theo tỷ lệ 1:1)`** để nước canh ngọt thanh và trong.",
+            "**Khi ăn chay:** Dùng **nước tương (xì dầu)** hoặc **nước mắm chay nấu từ dứa (thơm) và nấm đông cô**.",
         ],
     },
     {
-        "keywords": ["bị nhão", "bi nhao", "cơm nhão", "com nhao", "cơm sống", "com song", "cơm sượng", "com suong"],
-        "problem": "Cơm bị nhão (ướt) hoặc bị sống / sượng",
-        "solutions": [
-            "**Xử lý cơm bị nhão:** Mở nắp nồi để thoát bớt hơi nước, đặt **1–2 lát bánh mì ruột trắng** lên trên mặt cơm, đậy nắp ở chế độ `Warm` 10 phút — bánh mì sẽ hút hết nước thừa giúp hạt cơm ráo tơi.",
-            "**Xử lý cơm bị sống / sượng:** Xới tơi cơm sang nồi khác hoặc tạo các lỗ thoáng trên mặt cơm, rưới đều `2–3 muỗng canh nước ấm pha 1 muỗng cà phê rượu trắng` theo tỷ lệ 1:10 rồi bấm nút `Cook` lại. Rượu sẽ bay hơi hết và giúp cơm chín mềm đều.",
+        "names": ["dầu hào", "dau hao"],
+        "label": "Dầu hào",
+        "substitutes": [
+            "**Công thức thay thế 1 muỗng canh Dầu hào chuẩn nhất:** Pha **`1 muỗng canh xì dầu (nước tương) + 1/2 muỗng cà phê đường + 1/4 muỗng cà phê bột năng (hoặc bột bắp)`** — khi xào lên sẽ tạo độ sánh bóng và vị ngọt mặn y hệt dầu hào!",
+            "**Thay thế nhanh khi ướp thịt:** Dùng **`2/3 muỗng canh nước mắm + 1/2 muỗng cà phê đường (hoặc mật ong)`**.",
         ],
     },
     {
-        "keywords": ["bị đục", "bi duc", "nước dùng đục", "nuoc pho duc", "nước lèo đục", "nuoc dung duc"],
-        "problem": "Nước dùng Phở / Bún / Canh hầm xương bị đục",
-        "solutions": [
-            "**Tuyệt chiêu lòng trắng trứng gà:** Đánh tan `1 lòng trắng trứng gà` với chút nước nguội, đổ vào nồi nước dùng đang ấm rồi khuấy đều. Khi nước sôi lăn tăn, lòng trắng đông tụ sẽ cuốn theo toàn bộ cặn đục nổi lên mặt — chỉ cần vớt bỏ hoặc lọc qua rây là nước dùng trong veo!",
-            "**Thả vài lát khoai tây sống hoặc củ cải trắng:** Giúp hút bọt cặn và tăng độ ngọt thanh.",
-            "**Nguyên tắc phòng tránh:** Luôn chần xương với nước sôi + gừng + muối trong 3 phút đầu, rửa sạch máu bầm rồi mới ninh lửa nhỏ và **mở hé nắp nồi**.",
+        "names": ["nước cốt dừa", "nuoc cot dua", "cốt dừa", "cot dua"],
+        "label": "Nước cốt dừa",
+        "substitutes": [
+            "**Sữa tươi không đường + Bơ lạt (Khuyên dùng):** Pha **`200ml sữa tươi không đường + 15g bơ lạt đun chảy`** — tái tạo được 85–90% độ béo ngậy và sánh mịn cho món cà ri, kho, bánh.",
+            "**Sữa đặc + Sữa tươi:** Pha **`180ml sữa tươi + 2 muỗng canh sữa đặc`** khi nấu các món chè hoặc sinh tố.",
+            "**Kem tươi (Whipping Cream / Cooking Cream):** Thay thế trực tiếp theo tỷ lệ `1:1`.",
         ],
     },
     {
-        "keywords": ["bị dai", "bi dai", "thịt dai", "thit bo dai", "thịt cứng", "thit cung", "lâu mềm"],
-        "problem": "Thịt bò / Thịt hầm bị dai hoặc khô cứng",
-        "solutions": [
-            "**Khi đang hầm trên bếp:** Cho vào nồi `vài lát dứa (thơm) chín`, `1 miếng đu đủ xanh nhỏ` hoặc `1 muỗng cà phê nước cốt chanh` — enzyme tự nhiên (Bromelain/Papain) sẽ phá vỡ sợi cơ cứng giúp thịt mềm nhanh gấp đôi.",
-            "**Bí quyết ướp thịt bò xào không bị dai:** Cắt ngang thớ, ướp với `1 muỗng dầu ăn + 1/2 muỗng bột bắp + tỏi gừng`; chỉ nêm nước mắm/muối khi xào trên lửa thật lớn gần chín tới.",
+        "names": ["nước dừa", "nuoc dua", "dừa tươi", "dua tuoi", "dừa xiêm"],
+        "label": "Nước dừa tươi (khi kho thịt / hầm)",
+        "substitutes": [
+            "**Nước lọc ấm + Đường phèn (hoặc Đường thốt nốt):** Pha **`300ml nước ấm + 1 muỗng canh đường phèn`** sẽ tạo vị ngọt thanh tự nhiên và giúp thịt kho lên màu trong bóng gần giống nước dừa xiêm.",
+            "**Nước mía nguyên chất pha loãng (1 phần nước mía : 2 phần nước lọc):** Bí quyết kho cá/thịt cực ngon của đầu bếp miền Nam.",
         ],
     },
     {
-        "keywords": ["bị tanh", "bi tanh", "cá tanh", "ca tanh", "hải sản tanh", "khu mui tanh", "bị hôi", "thịt hôi"],
-        "problem": "Cá, Hải sản hoặc Thịt bị tanh / hôi",
-        "solutions": [
-            "**Khi sơ chế cá/hải sản:** Ngâm rửa với **nước vo gạo**, hoặc chà xát **muối hạt + gừng đập dập + rượu trắng/chanh**, đặc biệt phải cạo sạch lớp màng đen trong bụng cá và máu dọc xương sống.",
-            "**Khi món đang nấu bị tanh:** Cho thêm `gừng thái chỉ`, `sả đập dập`, `thì là`, `vài múi cà chua/dứa` hoặc `2 muỗng canh nước chè xanh đặc` vào nồi kho/canh.",
+        "names": ["bột năng", "bot nang", "bột bắp", "bot bap", "bột sắn", "bot san", "bột đao"],
+        "label": "Bột năng / Bột bắp (Tạo độ sánh)",
+        "substitutes": [
+            "**Bột năng ↔ Bột bắp ↔ Bột sắn dây:** Thay thế trực tiếp cho nhau theo tỷ lệ **`1:1`** (nhớ hòa tan với nước lạnh trước rồi mới rưới từ từ vào nồi đang sôi).",
+            "**Thay bằng Bột mì đa dụng:** Dùng lượng gấp đôi (`2 muỗng bột mì = 1 muỗng bột năng`), phù hợp để làm sánh nước sốt xào hoặc súp.",
+            "**Thay bằng Bột gạo:** Có thể dùng tạm cho món sốt nhưng độ trong sẽ kém hơn bột năng một chút.",
         ],
     },
     {
-        "keywords": ["cay quá", "cay qua", "quá cay", "bị cay", "chua quá", "chua qua", "bị chua", "quá chua", "ngọt quá", "quá ngọt"],
-        "problem": "Món ăn bị quá cay, quá chua hoặc quá ngọt",
-        "solutions": [
-            "**Chữa món quá cay:** Thêm `nước cốt dừa`, `sữa tươi không đường`, `một ít đường` hoặc `cà chua` — chất béo trong sữa/cốt dừa hòa tan hoạt chất cay Capsaicin ngay lập tức.",
-            "**Chữa món quá chua:** Thêm `1/2 – 1 muỗng cà phê đường phèn` hoặc `một nhúm rất nhỏ muối nở (Baking Soda)` để trung hòa axit chua.",
-            "**Chữa món quá ngọt:** Thêm `vài giọt nước cốt chanh / giấm táo` và một chút nước mắm để cân bằng lại hậu vị.",
+        "names": ["bột chiên giòn", "bot chien gion", "bột chiên xù", "bot chien xu", "bột mì", "bot mi"],
+        "label": "Bột chiên giòn / Bột mì",
+        "substitutes": [
+            "**Tự pha Bột chiên giòn tại nhà:** Trộn **`3 muỗng canh bột mì (hoặc bột gạo) + 1 muỗng canh bột năng (hoặc bột bắp) + 1/4 muỗng cà phê muối + chút bột nở (nếu có)`**, pha với nước đá lạnh hoặc bia sẽ chiên giòn rụm!",
+            "**Thay Bột chiên xù:** Dùng **bánh mì sandwich sấy khô bóp vụn**, **bánh phồng tôm sống giã nhỏ** hoặc **ngũ cốc bắp (Cornflakes) nghiền vụn**.",
         ],
     },
     {
-        "keywords": ["dính chảo", "dinh chao", "bắn dầu", "ban dau", "rã nát", "chiên cá", "chien ca", "rau bị đen", "rau bị vàng"],
-        "problem": "Chiên cá bị dính chảo/bắn dầu hoặc Rau luộc bị vàng úa",
-        "solutions": [
-            "**Chiên cá/đậu không dính chảo & không bắn dầu:** Thấm thật khô thực phẩm bằng giấy bếp; làm nóng chảo trước rồi mới cho dầu, rắc vào dầu **1/4 muỗng cà phê bột mì hoặc vài hạt muối** và xát 1 lát gừng tươi lên mặt chảo trước khi thả cá.",
-            "**Giữ rau luộc xanh mướt không bị thâm:** Nước phải thật sôi mới thả rau, thêm `1/2 muỗng cà phê muối + vài giọt dầu ăn`, luộc mở nắp trên lửa lớn rồi vớt ra đĩa thoáng (không đậy lồng bàn khi còn bốc khói).",
+        "names": ["rượu nấu ăn", "ruou nau an", "rượu trắng", "ruou trang", "rượu mirin", "mirin", "rượu"],
+        "label": "Rượu nấu ăn / Rượu trắng",
+        "substitutes": [
+            "**Khi cần khử mùi tanh thịt/cá:** Dùng **`Gừng tươi đập dập + 1 muỗng canh Giấm gạo (hoặc nước cốt chanh)`** chà xát hoặc cho vào nước chần.",
+            "**Khi thay rượu ngọt Mirin (món Nhật/Hàn/Sốt):** Pha **`1 muỗng canh nước táo ép (hoặc nước lọc) + 1/2 muỗng cà phê đường + vài giọt giấm gạo`**.",
+        ],
+    },
+    {
+        "names": ["hạt nêm", "hat nem", "bột ngọt", "bot ngot", "mì chính", "mi chinh"],
+        "label": "Hạt nêm / Bột ngọt (Mì chính)",
+        "substitutes": [
+            "**Thay 1 muỗng cà phê Hạt nêm:** Pha **`1/2 muỗng cà phê muối + 1/2 muỗng cà phê đường`** (hoặc dùng `1 muỗng cà phê nước mắm ngon`).",
+            "**Tạo vị ngọt tự nhiên không cần Bột ngọt:** Ninh nước dùng với **củ cải trắng, cà rốt, bắp Mỹ (ngô ngọt), hành tây nướng hoặc nấm hương/tôm khô**.",
+        ],
+    },
+    {
+        "names": ["đường phèn", "duong phen", "đường nâu", "duong nau", "đường thốt nốt", "duong thot not", "mật ong", "mat ong", "đường", "duong"],
+        "label": "Đường phèn / Đường nâu / Mật ong",
+        "substitutes": [
+            "**Thay Đường phèn:** Dùng **đường cát trắng** theo tỷ lệ `90g đường cát = 100g đường phèn`.",
+            "**Thay Mật ong (khi ướp nướng):** Dùng **`Sữa đặc`** hoặc **`Đường nâu / Đường trắng pha chút nước ấm`** giúp thịt nướng vẫn mềm mọng và lên màu cánh gián đẹp.",
+            "**Thay Đường khi ăn kiêng / hết đường:** Dùng **mật ong**, **sữa đặc** hoặc vị ngọt tự nhiên từ **hành tây xào, cà rốt, táo/lê ép**.",
+        ],
+    },
+    {
+        "names": ["chanh", "giấm", "giam", "me", "me chua", "quất", "tắc", "tac", "sấu"],
+        "label": "Chanh / Giấm / Me chua",
+        "substitutes": [
+            "**Chanh ↔ Quất (Tắc):** `2 quả tắc = 1 quả chanh vừa`, rất thơm khi pha nước chấm hoặc ăn phở/bún.",
+            "**Chanh ↔ Giấm gạo / Giấm táo:** Thay thế tỷ lệ `1:1` (`1 muỗng canh giấm = 1 muỗng canh nước cốt chanh`).",
+            "**Thay Me chua khi nấu canh chua:** Dùng **cà chua chín + dứa (thơm)**, **khế chua**, **sấu** hoặc **nước cốt chanh** (nếu dùng chanh thì tắt bếp mới vắt vào để không bị đắng).",
+        ],
+    },
+    {
+        "names": ["bơ", "bo lat", "bơ lạt", "dầu ăn", "dau an", "mỡ heo", "mo heo"],
+        "label": "Bơ lạt / Dầu ăn / Mỡ",
+        "substitutes": [
+            "**Thay Bơ lạt khi xào/áp chảo:** Dùng **dầu ăn, dầu ô-liu hoặc mỡ heo** theo tỷ lệ `8ml dầu = 10g bơ`.",
+            "**Thay Dầu ăn khi hết dầu:** Dùng **bơ**, **mỡ heo/mỡ gà**, hoặc nếu chiên thịt ba chỉ/sườn thì chỉ cần áp chảo khô trên lửa nhỏ để mỡ tự tiết ra.",
+        ],
+    },
+    {
+        "names": ["sữa tươi", "sua tuoi", "sữa đặc", "sua dac", "kem tươi", "whipping cream", "sữa chua", "sua chua"],
+        "label": "Sữa tươi / Sữa đặc / Kem tươi",
+        "substitutes": [
+            "**Thay Sữa tươi:** Pha loãng **`1 muỗng canh sữa đặc với 4 muỗng canh nước ấm`** (hoặc dùng **nước cốt dừa loãng / sữa hạt**).",
+            "**Thay Sữa đặc:** Dùng **`Sữa tươi đun nhỏ lửa với đường`** theo tỷ lệ `100ml sữa tươi + 30g đường + 5g bơ`.",
+            "**Thay Kem tươi (Whipping Cream) trong nấu súp/sốt:** Pha **`160ml sữa tươi không đường + 40g bơ lạt đun chảy + 1 muỗng cà phê bột mì`**.",
+        ],
+    },
+    {
+        "names": ["hành tím", "hanh tim", "hành khô", "hanh kho", "tỏi", "toi", "hành tây", "hanh tay", "hành lá", "hanh la", "rau mùi", "ngò"],
+        "label": "Hành tím / Tỏi / Hành tây / Hành lá",
+        "substitutes": [
+            "**Thay Hành tím (Hành khô):** Dùng **phần gốc trắng của hành lá đập dập**, **hành tây băm nhỏ** hoặc **hành boa-rô (tỏi tây)** để phi thơm.",
+            "**Thay Tỏi:** Dùng **hành tím băm + 1 lát gừng nhỏ** hoặc **bột tỏi** (`1/4 muỗng cà phê bột tỏi = 1 tép tỏi tươi`).",
+            "**Thay Hành lá / Ngò rí:** Dùng **hẹ tươi, cần tây, rau răm hoặc thì là** tùy theo món canh/xào.",
+        ],
+    },
+    {
+        "names": ["gừng", "gung", "sả", "sa", "riềng", "rieng", "lá chanh", "la chanh", "ớt", "ot", "tiêu", "tieu"],
+        "label": "Gừng / Sả / Riềng / Ớt / Tiêu",
+        "substitutes": [
+            "**Thay Gừng tươi:** Dùng **sả đập dập**, **riềng**, **tiêu hạt đập dập** hoặc **vỏ chanh/cam bào mỏng** để tạo hương ấm và khử mùi tanh.",
+            "**Thay Sả:** Dùng **gừng tươi + vài lá chanh thái chỉ** (hoặc vỏ chanh bào).",
+            "**Thay Ớt tươi:** Dùng **ớt bột, tương ớt, sa tế hoặc hạt tiêu xay** để tạo vị cay.",
+        ],
+    },
+    {
+        "names": ["nước hàng", "nuoc hang", "nước màu", "nuoc mau", "màu điều", "mau dieu", "bột nghệ", "bot nghe", "ngũ vị hương", "ngu vi huong"],
+        "label": "Nước màu (Nước hàng) / Dầu màu điều / Bột nghệ / Ngũ vị hương",
+        "substitutes": [
+            "**Khi không có Nước màu (Nước hàng) kho thịt/cá:** Cho `2 muỗng canh đường + 1 muỗng canh nước (hoặc dầu ăn)` vào chảo thắng lửa nhỏ 2 phút đến khi lên màu cánh gián; hoặc thay bằng **xì dầu (nước tương) + mật ong**.",
+            "**Thay Dầu màu điều:** Dùng **bột nghệ**, **bột ớt Paprika** hoặc **cà chua chín băm nhuyễn xào với dầu ăn** để lấy màu đỏ vàng đẹp mắt.",
+            "**Thay Ngũ vị hương:** Trộn **`tiêu xay + bột quế (nếu có) + tỏi sả băm + chút dầu hào`**.",
+        ],
+    },
+    {
+        "names": ["trứng gà", "trung ga", "trứng", "trung", "cà chua", "ca chua", "tương ớt", "tuong ot", "tương cà", "tuong ca"],
+        "label": "Trứng / Cà chua / Tương cà",
+        "substitutes": [
+            "**Thay Trứng gà khi trộn chả/mọc:** Dùng **`1 muỗng canh bột năng (hoặc bột bắp) + 1 muỗng canh nước lạnh`** để tạo độ kết dính dai giòn.",
+            "**Thay Cà chua tươi khi nấu canh/sốt:** Dùng **`2 muỗng canh tương cà (Ketchup) pha nước`** hoặc dùng **dứa (thơm) / me chua**.",
         ],
     },
 ]
 
-
-# ============================================================
-# CÁC HÀM TIỆN ÍCH CHUẨN HÓA & ĐỊNH DẠNG
-# ============================================================
 
 def _normalize(text: str) -> str:
     return db.slugify_vietnamese(text or "").replace("-", " ")
@@ -292,19 +379,129 @@ def _is_off_topic(msg_norm: str) -> bool:
 
 
 # ============================================================
-# NHÓM 1.1: TỦ LẠNH CÓ GÌ? — GỢI Ý MÓN TỪ NGUYÊN LIỆU SẴN CÓ
+# BỘ XỬ LÝ SỰ CỐ MÓN ĂN & SƠ CHẾ KHỬ MÙI (NHÓM 2)
+# ============================================================
+
+def _handle_kitchen_rescue(raw_msg: str, msg_norm: str) -> Optional[Dict[str, Any]]:
+    for rule in RESCUE_RULES:
+        for pat in rule["patterns"]:
+            if re.search(pat, msg_norm):
+                bullets = "\n".join(f"- {s}" for s in rule["solutions"])
+                return {
+                    "intent": "kitchen_rescue",
+                    "reply": f"🆘 **Cách xử lý: {rule['title']}**\n\n{bullets}",
+                    "recipes": [],
+                    "suggestions": [
+                        "Khi làm món ăn bị cháy thì xử lý như nào?",
+                        "Canh bị mặn quá chữa sao?",
+                        "Tôi không có xì dầu thì thay bằng gì?",
+                    ],
+                }
+
+    # Nếu câu hỏi có từ khóa hỏi cách xử lý sự cố chung ("cấp cứu", "bị lỗi", "chữa cháy")
+    if any(w in msg_norm for w in ["cap cuu", "chua chay", "bi loi"]):
+        burned = RESCUE_RULES[3]
+        bullets = "\n".join(f"- {s}" for s in burned["solutions"])
+        return {
+            "intent": "kitchen_rescue",
+            "reply": f"🆘 **Cách xử lý: {burned['problem'] if 'problem' in burned else burned['title']}**\n\n{bullets}",
+            "recipes": [],
+            "suggestions": [
+                "Thịt gà bị hôi xử lý bằng gì?",
+                "Canh bị mặn quá chữa sao?",
+                "Cơm bị nhão làm thế nào?",
+            ],
+        }
+    return None
+
+
+# ============================================================
+# BỘ XỬ LÝ THAY THẾ NGUYÊN LIỆU KHI THIẾU (NHÓM 2)
+# ============================================================
+
+def _extract_missing_ingredient_phrase(raw_msg: str) -> Optional[str]:
+    patterns = [
+        r"(?:không có|khong co|thiếu|thieu|hết|het|thay thế|thay the|thay)\s+([a-zA-ZÀ-ỹ\s]{2,25}?)(?:\s+thì|\s+thi|\s+bằng|\s+bang|\s+được|\s+duoc|\?|$)",
+    ]
+    for pat in patterns:
+        m = re.search(pat, raw_msg, flags=re.IGNORECASE)
+        if m:
+            extracted = m.group(1).strip(" .,?!\"'")
+            if len(extracted) >= 2:
+                return extracted
+    return None
+
+
+def _handle_substitution(raw_msg: str, msg_norm: str) -> Optional[Dict[str, Any]]:
+    has_sub_intent = any(
+        w in msg_norm
+        for w in ["thay", "het ", "khong co", "thieu", "an chay", "mam chay"]
+    )
+    if not has_sub_intent:
+        return None
+
+    for item in SUBSTITUTION_CATALOG:
+        for name_kw in item["names"]:
+            norm_kw = _normalize(name_kw)
+            if norm_kw and re.search(r"\b" + re.escape(norm_kw) + r"\b", msg_norm):
+                bullets = "\n".join(f"- {s}" for s in item["substitutes"])
+                return {
+                    "intent": "ingredient_substitution",
+                    "reply": (
+                        f"🔄 **Giải pháp thay thế khi bạn không có / thiếu \"{item['label']}\":**\n\n"
+                        f"{bullets}\n\n"
+                        f"💡 *Mẹo nhỏ: Khi nêm nguyên liệu thay thế, bạn hãy cho khoảng 2/3 lượng dự kiến trước rồi nếm lại cho vừa khẩu vị nhé!*"
+                    ),
+                    "recipes": [],
+                    "suggestions": [
+                        "Tôi không có dầu hào thì thay bằng gì?",
+                        "Thiếu nước cốt dừa thì thay bằng gì?",
+                        "Thịt gà bị hôi xử lý bằng gì?",
+                    ],
+                }
+
+    # Nếu người dùng hỏi một nguyên liệu nằm ngoài danh mục 17 nhóm trên, bóc tách trực tiếp tên nguyên liệu để trả lời đúng trọng tâm
+    extracted = _extract_missing_ingredient_phrase(raw_msg)
+    if extracted:
+        return {
+            "intent": "ingredient_substitution",
+            "reply": (
+                f"🔄 **Gợi ý khi bạn không có \"{extracted}\":**\n\n"
+                f"- **Nếu \"{extracted}\" đóng vai trò tạo vị mặn/đậm đà:** Có thể thay bằng **nước mắm, xì dầu (nước tương), muối + hạt nêm** hoặc **dầu hào**.\n"
+                f"- **Nếu \"{extracted}\" đóng vai trò tạo mùi thơm / rau gia vị:** Có thể thay bằng các loại gia vị dậy hương sẵn có trong bếp như **hành tím, tỏi phi, gừng, sả, tiêu xay hoặc hành lá**.\n"
+                f"- **Nếu \"{extracted}\" là nguyên liệu rau củ / thịt phụ:** Bạn hoàn toàn có thể lược bỏ hoặc thay bằng loại rau củ/nấm sẵn có trong tủ lạnh theo tỷ lệ khối lượng `1:1` mà không làm hỏng cấu trúc món ăn!"
+            ),
+            "recipes": [],
+            "suggestions": [
+                "Tôi không có xì dầu",
+                "Thiếu nước cốt dừa thay bằng gì?",
+                "Thiếu bột năng thay bằng gì?",
+            ],
+        }
+
+    return None
+
+
+# ============================================================
+# NHÓM 1: TỦ LẠNH CÓ GÌ? — GỢI Ý MÓN TỪ NGUYÊN LIỆU SẴN CÓ
 # ============================================================
 
 def _handle_fridge_search(
     message: str, msg_norm: str, all_recipes: List[Dict[str, Any]], all_ingredients: List[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
+    # Không chạy tìm nguyên liệu tủ lạnh nếu câu hỏi mang tính hỏi sự cố / cách xử lý / tại sao
+    if any(
+        w in msg_norm
+        for w in ["bi ", "xu li", "xu ly", "khu mui", "lam sach", "so che", "chua ", "tai sao", "nhu nao"]
+    ) and not any(w in msg_norm for w in ["nau mon gi", "nau gi", "lam mon gi"]):
+        return None
+
     detected_ing_names: List[str] = []
     for ing in all_ingredients:
         ing_norm = _normalize(ing["name"])
         if ing_norm and re.search(r"\b" + re.escape(ing_norm) + r"\b", msg_norm):
             detected_ing_names.append(ing["name"])
 
-    # Từ điển đồng nghĩa nguyên liệu tiếng Việt mở rộng
     synonym_keywords = {
         "thit bo": "Thịt bò",
         "bo": "Thịt bò",
@@ -313,7 +510,9 @@ def _handle_fridge_search(
         "ba chi": "Thịt ba chỉ",
         "suon": "Sườn heo",
         "thit ga": "Thịt gà",
-        "uc ga": "Thịt gà",
+        "uc ga": "Ức gà / Thịt gà",
+        "dui ga": "Đùi gà / Thịt gà",
+        "ga": "Thịt gà",
         "trung": "Trứng gà",
         "trung ga": "Trứng gà",
         "ca chua": "Cà chua",
@@ -349,10 +548,17 @@ def _handle_fridge_search(
         missing_list = []
         for ri in r_ings:
             ri_norm = _normalize(ri["name"])
-            matched_user = any(
-                _normalize(u_ing) in ri_norm or ri_norm in _normalize(u_ing)
-                for u_ing in detected_ing_names
-            )
+            matched_user = False
+            for u_ing in detected_ing_names:
+                u_norm = _normalize(u_ing)
+                if (
+                    u_norm in ri_norm
+                    or ri_norm in u_norm
+                    or ("ga" in u_norm and "thit ga" in ri_norm)
+                    or ("heo" in u_norm and ("ba chi" in ri_norm or "suon" in ri_norm or "nac vai" in ri_norm))
+                ):
+                    matched_user = True
+                    break
             if matched_user:
                 have_list.append(ri["name"])
             else:
@@ -368,7 +574,7 @@ def _handle_fridge_search(
     top = scored_recipes[:3]
 
     lines = [
-        f"🧊 **Với nguyên liệu bạn đang có ({', '.join(detected_ing_names)})**, bạn có thể nấu ngay **{len(scored_recipes)} món ngon** sau đây:\n"
+        f"🧊 **Với nguyên liệu bạn đang có ({', '.join(detected_ing_names)})**, bạn có thể chế biến ngay **{len(scored_recipes)} món ngon** sau đây:\n"
     ]
     cards = []
     for idx, (match_cnt, ratio, r, have_l, miss_l) in enumerate(top, 1):
@@ -385,7 +591,6 @@ def _handle_fridge_search(
         )
         cards.append(_format_recipe_card(r))
 
-    lines.append("\n👉 *Nhấn vào thẻ món ăn bên dưới để xem định lượng chi tiết và các bước chế biến!*")
     return {
         "intent": "fridge_match",
         "reply": "\n".join(lines),
@@ -393,13 +598,13 @@ def _handle_fridge_search(
         "suggestions": [
             f"Quy đổi {top[0][2]['title']} cho 6 người",
             f"Cách nấu {top[0][2]['title']}",
-            "Món ăn bị cháy hoặc mặn xử lý sao?",
+            "Thịt gà bị hôi xử lý bằng gì?",
         ],
     }
 
 
 # ============================================================
-# NHÓM 1.2: TƯ VẤN MÓN ĂN THEO CALO & DINH DƯỠNG (UC06-B)
+# NHÓM 1: TƯ VẤN MÓN ĂN THEO CALO & DINH DƯỠNG (UC06-B)
 # ============================================================
 
 def _handle_nutrition_query(
@@ -434,7 +639,7 @@ def _handle_nutrition_query(
             "suggestions": [
                 "Món ăn dưới 350 kcal giảm cân",
                 "Món giàu Protein tăng cơ",
-                "Có ức gà, trứng, cà chua nấu món gì?",
+                "Tôi không có xì dầu thì thay bằng gì?",
             ],
         }
 
@@ -458,7 +663,7 @@ def _handle_nutrition_query(
             "intent": "nutrition_plan",
             "reply": "\n".join(lines),
             "recipes": [_format_recipe_card(r) for r in sorted_prot],
-            "suggestions": ["Thực đơn 3 bữa 1500 kcal", "Món ăn dưới 350 kcal", "Thịt bò bị dai xử lý sao?"],
+            "suggestions": ["Thực đơn 3 bữa 1500 kcal", "Món ăn dưới 350 kcal", "Thịt gà bị hôi xử lý sao?"],
         }
 
     low_cal = [r for r in all_recipes if int(r.get("calories", 350)) <= max_cal]
@@ -488,7 +693,7 @@ def _handle_nutrition_query(
 
 
 # ============================================================
-# NHÓM 1.3: TÍNH TOÁN & QUY ĐỔI KHẨU PHẦN ĂN (UC06-A)
+# NHÓM 1: TÍNH TOÁN & QUY ĐỔI KHẨU PHẦN ĂN (UC06-A)
 # ============================================================
 
 def _handle_portion_scaling(
@@ -535,95 +740,13 @@ def _handle_portion_scaling(
         "suggestions": [
             f"Cách nấu {target_recipe['title']}",
             f"Quy đổi {target_recipe['title']} cho 10 người",
-            "Khi nấu món ăn bị cháy xử lý thế nào?",
+            "Khi làm món ăn bị cháy xử lý thế nào?",
         ],
     }
 
 
 # ============================================================
-# NHÓM 2.1 & 2.2: CẤP CỨU MÓN ĂN & THAY THẾ NGUYÊN LIỆU
-# ============================================================
-
-def _handle_kitchen_rescue(msg_norm: str) -> Optional[Dict[str, Any]]:
-    for item in KITCHEN_RESCUE_KNOWLEDGE:
-        if any(_normalize(kw) in msg_norm for kw in item["keywords"]):
-            bullets = "\n".join(f"- {s}" for s in item["solutions"])
-            return {
-                "intent": "kitchen_rescue",
-                "reply": (
-                    f"🆘 **Xử lý sự cố món ăn — {item['problem']}:**\n\n"
-                    f"{bullets}"
-                ),
-                "recipes": [],
-                "suggestions": [
-                    "Khi làm món ăn bị cháy xử lý như nào?",
-                    "Canh bị mặn quá chữa sao?",
-                    "Thiếu nước cốt dừa thay bằng gì?",
-                ],
-            }
-    if any(w in msg_norm for w in ["cap cuu", "chua chay", "bi loi", "xu ly", "xu li", "bi chay", "chay"]):
-        # Default to burned dish rescue when user asks about burning or general kitchen error
-        burned = KITCHEN_RESCUE_KNOWLEDGE[0]
-        bullets = "\n".join(f"- {s}" for s in burned["solutions"])
-        return {
-            "intent": "kitchen_rescue",
-            "reply": f"🆘 **Xử lý sự cố món ăn — {burned['problem']}:**\n\n{bullets}",
-            "recipes": [],
-            "suggestions": [
-                "Canh bị mặn quá chữa sao?",
-                "Cơm bị nhão làm thế nào?",
-                "Nước phở bị đục xử lý sao?",
-            ],
-        }
-    return None
-
-
-def _handle_substitution(msg_norm: str) -> Optional[Dict[str, Any]]:
-    has_sub_intent = any(
-        w in msg_norm
-        for w in ["thay", "het ", "khong co", "thieu", "an chay", "mam chay"]
-    )
-    if not has_sub_intent:
-        return None
-    for item in SUBSTITUTION_KNOWLEDGE:
-        if any(_normalize(kw) in msg_norm for kw in item["keywords"]):
-            bullets = "\n".join(f"- {s}" for s in item["substitutes"])
-            return {
-                "intent": "ingredient_substitution",
-                "reply": (
-                    f"🔄 **Gợi ý thay thế khi thiếu \"{item['ingredient']}\":**\n\n"
-                    f"{bullets}\n\n"
-                    f"💡 *Lưu ý đầu bếp: Khi dùng nguyên liệu thay thế, bạn nên nếm thử từ 2/3 định lượng trước để điều chỉnh độ mặn/ngọt vừa miệng nhé!*"
-                ),
-                "recipes": [],
-                "suggestions": [
-                    "Thiếu bột năng thì thay bằng gì?",
-                    "Ăn chay thay nước mắm bằng gì?",
-                    "Không có rượu nấu ăn khử mùi bằng gì?",
-                ],
-            }
-    overview = "\n".join(
-        f"- **Thiếu {it['ingredient']}:** {it['substitutes'][0]}"
-        for it in SUBSTITUTION_KNOWLEDGE[:6]
-    )
-    return {
-        "intent": "ingredient_substitution",
-        "reply": (
-            "🔄 **Bảng gợi ý thay thế các nguyên liệu thường thiếu trong bếp:**\n\n"
-            + overview
-            + "\n\n*Bạn đang thiếu nguyên liệu cụ thể nào? Hãy nhắn tên nguyên liệu đó (VD: \"Thiếu dầu hào\", \"Hết nước cốt dừa\") để mình chỉ cách thay thế chuẩn nhất nhé!*"
-        ),
-        "recipes": [],
-        "suggestions": [
-            "Hết nước cốt dừa thay bằng gì?",
-            "Thiếu bột năng thay bằng bột gì?",
-            "Thiếu dầu hào thay bằng gì?",
-        ],
-    }
-
-
-# ============================================================
-# NHÓM 2.3: HỎI ĐÁP CÁCH NẤU THEO MÓN ĂN / NGỮ CẢNH ĐANG XEM
+# NHÓM 2: HỎI ĐÁP CÁCH NẤU THEO MÓN ĂN / NGỮ CẢNH ĐANG XEM
 # ============================================================
 
 def _handle_recipe_context_question(
@@ -635,7 +758,8 @@ def _handle_recipe_context_question(
     mentioned = _find_mentioned_recipes(msg_norm, all_recipes)
     recipe = mentioned[0] if mentioned else None
     if not recipe and current_recipe_id:
-        recipe = next((r for r in all_recipes if r["id"] == int(current_recipe_id)), None)
+        if any(w in msg_norm for w in ["buoc", "cach nau", "mon nay", "dang xem", "tom tat", "nguyen lieu", "bao lau", "nhu nao", "the nao"]):
+            recipe = next((r for r in all_recipes if r["id"] == int(current_recipe_id)), None)
 
     if not recipe:
         return None
@@ -653,7 +777,7 @@ def _handle_recipe_context_question(
                 "reply": (
                     f"👩‍🍳 **Hướng dẫn chi tiết Bước {step_num} của món \"{recipe['title']}\":**\n\n"
                     f"> {found_step['description']}\n\n"
-                    f"💡 *Mẹo nhỏ:* Giữ mức lửa ổn định và chuẩn bị sẵn gia vị trước khi thao tác bước này để món ăn không bị quá lửa nhé!"
+                    f"💡 *Mẹo nhỏ:* Giữ mức lửa ổn định và chuẩn bị sẵn gia vị trước khi thao tác bước này để món ăn dậy hương chuẩn nhất!"
                 ),
                 "recipes": [_format_recipe_card(recipe)],
                 "suggestions": [
@@ -686,14 +810,14 @@ def _handle_recipe_context_question(
         "recipes": [_format_recipe_card(recipe)],
         "suggestions": [
             f"Quy đổi {recipe['title']} cho 8 người",
-            "Thiếu nguyên liệu thì thay thế bằng gì?",
-            "Món kho bị cháy xử lý thế nào?",
+            "Tôi không có xì dầu thì thay bằng gì?",
+            "Thịt gà bị hôi xử lý bằng gì?",
         ],
     }
 
 
 # ============================================================
-# MAIN ROUTER — CHỈ GIẢI ĐÁP VỀ MÓN ĂN (TÍCH HỢP NHÓM 1 & 2)
+# MAIN ROUTER
 # ============================================================
 
 def generate_chatbot_response(
@@ -701,16 +825,6 @@ def generate_chatbot_response(
     context: Optional[Dict[str, Any]] = None,
     db_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Trợ lý AI chuyên biệt về món ăn (Nhóm 1 & Nhóm 2):
-      - Có nguyên liệu này nấu món gì? (`fridge_match`)
-      - Tư vấn dinh dưỡng & Calo (`nutrition_plan`)
-      - Quy đổi định lượng khẩu phần (`portion_scale`)
-      - Xử lý sự cố khi nấu ăn: cháy, mặn, nhão, khê, đục, dai, tanh (`kitchen_rescue`)
-      - Thay thế nguyên liệu khi thiếu (`ingredient_substitution`)
-      - Giải đáp chi tiết cách nấu món ăn (`recipe_context`)
-      - Từ chối câu hỏi ngoài phạm vi ẩm thực (`off_topic`)
-    """
     context = context or {}
     raw_msg = (message or "").strip()
     msg_norm = _normalize(raw_msg)
@@ -724,59 +838,59 @@ def generate_chatbot_response(
             "intent": "greeting",
             "reply": (
                 "Xin chào! Mình là **Trợ lý Đầu bếp AI của CookMate** 👨‍🍳 (Chuyên giải đáp về Món ăn & Kỹ thuật nấu nướng).\n\n"
-                "Bạn có thể hỏi mình ngay về:\n"
+                "Bạn có thể hỏi mình trực tiếp bất kỳ vấn đề nào trong bếp:\n"
                 "1. 🧊 **Có nguyên liệu này nấu món gì?** *(VD: \"Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?\")*\n"
-                "2. 🆘 **Xử lý sự cố khi nấu ăn:** *(VD: \"Khi làm món ăn bị cháy thì xử lý như nào?\", \"Canh bị mặn chữa sao?\")*\n"
-                "3. 🔄 **Thay thế nguyên liệu bị thiếu:** *(VD: \"Thiếu nước cốt dừa thay bằng gì?\", \"Hết bột năng thay bằng gì?\")*\n"
+                "2. 🆘 **Xử lý sự cố & Sơ chế khử mùi:** *(VD: \"Thịt gà của tôi bị hôi xử lý bằng gì?\", \"Khi làm món ăn bị cháy xử lý như nào?\")*\n"
+                "3. 🔄 **Thay thế nguyên liệu bị thiếu:** *(VD: \"Tôi không có xì dầu\", \"Thiếu nước cốt dừa thay bằng gì?\")*\n"
                 "4. ⚖️ **Quy đổi khẩu phần & Dinh dưỡng:** *(VD: \"Phở bò cho 8 người\", \"Thực đơn 3 bữa 1500 kcal\")*"
             ),
             "recipes": [_format_recipe_card(r) for r in all_recipes[:2]],
             "suggestions": [
                 "Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?",
+                "Thịt gà của tôi bị hôi có thể xử lý bằng gì?",
+                "Tôi không có xì dầu thì thay bằng gì?",
                 "Khi làm món ăn bị cháy thì xử lý như nào?",
-                "Thiếu nước cốt dừa thì thay bằng gì?",
-                "Phở bò Hà Nội nấu cho 8 người",
             ],
         }
 
-    # 0. Guardrail: Từ chối lịch sự nếu câu hỏi nằm ngoài chủ đề món ăn / ẩm thực
+    # 0. Guardrail: Từ chối lịch sự câu hỏi ngoài phạm vi ẩm thực
     if _is_off_topic(msg_norm):
         return {
             "intent": "off_topic",
             "reply": (
                 "🙏 Xin lỗi bạn, mình là **Trợ lý Đầu bếp AI của CookMate** nên **chỉ giải đáp các câu hỏi liên quan đến món ăn, nguyên liệu, dinh dưỡng và kỹ thuật nấu nướng**.\n\n"
-                "Bạn hãy thử hỏi mình những câu như:\n"
-                "- *\"Tôi có thịt heo, trứng, cà chua thì nấu món gì?\"*\n"
-                "- *\"Khi làm món ăn bị cháy hoặc bị mặn thì xử lý như thế nào?\"*\n"
-                "- *\"Thiếu nước cốt dừa / bột năng thì thay thế bằng nguyên liệu nào?\"*"
+                "Bạn hãy thử hỏi mình:\n"
+                "- *\"Thịt gà của tôi bị hôi có thể xử lý bằng gì?\"*\n"
+                "- *\"Tôi không có xì dầu / nước cốt dừa thì thay bằng gì?\"*\n"
+                "- *\"Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?\"*"
             ),
             "recipes": [],
             "suggestions": [
+                "Thịt gà của tôi bị hôi có thể xử lý bằng gì?",
+                "Tôi không có xì dầu thì thay bằng gì?",
                 "Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?",
-                "Khi làm món ăn bị cháy thì xử lý như nào?",
-                "Thiếu nước cốt dừa thì thay bằng gì?",
             ],
         }
 
-    # 1. Xử lý sự cố nhà bếp ("Cấp cứu món ăn": cháy, khê, mặn, nhão, đục, dai, tanh...) — Nhóm 2
-    rescue = _handle_kitchen_rescue(msg_norm)
+    # 1. Xử lý sự cố nhà bếp & Sơ chế khử mùi (Nhóm 2 - Ưu tiên số 1 để không nhầm với tìm nguyên liệu!)
+    rescue = _handle_kitchen_rescue(raw_msg, msg_norm)
     if rescue:
         return rescue
 
-    # 2. Thay thế nguyên liệu khi thiếu — Nhóm 2
-    sub = _handle_substitution(msg_norm)
+    # 2. Thay thế nguyên liệu khi thiếu (Nhóm 2 - Ưu tiên số 2)
+    sub = _handle_substitution(raw_msg, msg_norm)
     if sub:
         return sub
 
-    # 3. Tính toán & quy đổi khẩu phần ăn (UC06-A) — Nhóm 1
-    if any(kw in msg_norm for kw in ["quy doi", "khau phan", "nguoi an", "cho ", "suat"]):
+    # 3. Quy đổi khẩu phần ăn (Nhóm 1 - UC06-A)
+    if any(kw in msg_norm for kw in ["quy doi", "khau phan", "nguoi an", "suat"]) or re.search(r"\bcho\s*\d+\s*nguoi\b", msg_norm):
         scaled_resp = _handle_portion_scaling(
             raw_msg, msg_norm, all_recipes, current_recipe_id=current_recipe_id
         )
         if scaled_resp:
             return scaled_resp
 
-    # 4. Tư vấn món ăn theo Calo & Dinh dưỡng (UC06-B) — Nhóm 1
+    # 4. Tư vấn món ăn theo Calo & Dinh dưỡng (Nhóm 1 - UC06-B)
     if any(
         kw in msg_norm
         for kw in [
@@ -794,35 +908,44 @@ def generate_chatbot_response(
     ):
         return _handle_nutrition_query(raw_msg, msg_norm, all_recipes)
 
-    # 5. Có nguyên liệu này nấu món gì? (Fridge / Ingredient Matcher) — Nhóm 1
+    # 5. Hỏi đáp chi tiết cách nấu món ăn cụ thể được nhắc tên trong câu hỏi
+    mentioned = _find_mentioned_recipes(msg_norm, all_recipes)
+    if mentioned and any(w in msg_norm for w in ["cach nau", "cach lam", "buoc", "cong thuc", "nhu nao", "the nao"]):
+        ctx_resp = _handle_recipe_context_question(
+            raw_msg, msg_norm, all_recipes, current_recipe_id=current_recipe_id
+        )
+        if ctx_resp:
+            return ctx_resp
+
+    # 6. Có nguyên liệu này nấu món gì? (Nhóm 1 - Fridge / Ingredient Matcher)
     fridge = _handle_fridge_search(raw_msg, msg_norm, all_recipes, all_ingredients)
     if fridge:
         return fridge
 
-    # 6. Hỏi đáp chi tiết cách nấu món ăn / món đang xem trên màn hình — Nhóm 2
+    # 7. Hỏi đáp theo ngữ cảnh món đang xem trên màn hình
     ctx_resp = _handle_recipe_context_question(
         raw_msg, msg_norm, all_recipes, current_recipe_id=current_recipe_id
     )
     if ctx_resp:
         return ctx_resp
 
-    # 7. Phản hồi hướng dẫn mặc định tập trung hoàn toàn vào Nhóm 1 & Nhóm 2
+    # 8. Phản hồi mặc định
     featured = [r for r in all_recipes if r.get("featured")] or all_recipes[:3]
     return {
         "intent": "general_recommend",
         "reply": (
-            "👨‍🍳 **Mình sẵn sàng giải đáp mọi thắc mắc về món ăn và nấu nướng cho bạn!**\n\n"
-            "Hãy cho mình biết:\n"
-            "- 🧊 **Nguyên liệu bạn đang có:** *\"Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?\"*\n"
-            "- 🆘 **Sự cố món ăn đang gặp:** *\"Món ăn bị cháy xử lý sao?\"*, *\"Canh bị mặn chữa thế nào?\"*\n"
-            "- 🔄 **Nguyên liệu đang thiếu:** *\"Thiếu nước cốt dừa / bột năng thay bằng gì?\"*\n"
-            "- ⚖️ **Định lượng & Dinh dưỡng:** *\"Phở bò cho 8 người\"*, *\"Món ăn dưới 400 kcal\"*"
+            "👨‍🍳 **Mình sẵn sàng giải đáp cụ thể câu hỏi về món ăn và nấu nướng của bạn!**\n\n"
+            "Bạn có thể hỏi trực tiếp như:\n"
+            "- 🆘 **Khử mùi / Chữa lỗi món ăn:** *\"Thịt gà bị hôi xử lý bằng gì?\"*, *\"Món ăn bị cháy / bị mặn làm sao?\"*\n"
+            "- 🔄 **Thay thế nguyên liệu:** *\"Tôi không có xì dầu\"*, *\"Thiếu nước cốt dừa / bột năng thay bằng gì?\"*\n"
+            "- 🧊 **Gợi ý món từ nguyên liệu:** *\"Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?\"*\n"
+            "- ⚖️ **Định lượng & Calo:** *\"Phở bò cho 8 người\"*, *\"Thực đơn 3 bữa 1500 kcal\"*"
         ),
         "recipes": [_format_recipe_card(r) for r in featured[:3]],
         "suggestions": [
-            "Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?",
+            "Thịt gà của tôi bị hôi có thể xử lý bằng gì?",
+            "Tôi không có xì dầu thì thay bằng gì?",
             "Khi làm món ăn bị cháy thì xử lý như nào?",
-            "Thiếu nước cốt dừa thì thay bằng gì?",
-            "Thực đơn 3 bữa 1500 kcal",
+            "Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?",
         ],
     }
