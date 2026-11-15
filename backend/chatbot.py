@@ -817,42 +817,199 @@ def _handle_recipe_context_question(
 
 
 # ============================================================
-# MAIN ROUTER
+# GOOGLE GEMINI AI + RAG ENGINE (gemini-4-hydrogen Interactions API)
 # ============================================================
 
-def generate_chatbot_response(
+GEMINI_MODEL = "gemini-4-hydrogen"
+_ENV_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+
+
+def get_configured_api_key(override_key: Optional[str] = None) -> str:
+    """Lấy GEMINI_API_KEY từ tham số truyền vào, biến môi trường hoặc file .env."""
+    if override_key and str(override_key).strip():
+        return str(override_key).strip()
+
+    env_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if env_key and env_key.strip():
+        return env_key.strip()
+
+    if os.path.exists(_ENV_FILE_PATH):
+        try:
+            with open(_ENV_FILE_PATH, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("GEMINI_API_KEY=") or line.startswith("GOOGLE_API_KEY="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if val:
+                            return val
+        except OSError:
+            pass
+    return ""
+
+
+def save_api_key_to_env(api_key: str) -> bool:
+    """Lưu GEMINI_API_KEY vào biến môi trường và file .env tại thư mục gốc."""
+    cleaned = (api_key or "").strip()
+    os.environ["GEMINI_API_KEY"] = cleaned
+    try:
+        lines: List[str] = []
+        if os.path.exists(_ENV_FILE_PATH):
+            with open(_ENV_FILE_PATH, "r", encoding="utf-8") as f:
+                lines = [
+                    ln for ln in f.readlines()
+                    if not ln.strip().startswith("GEMINI_API_KEY=")
+                ]
+        if cleaned:
+            lines.append(f"GEMINI_API_KEY={cleaned}\n")
+        with open(_ENV_FILE_PATH, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+        return True
+    except OSError:
+        return False
+
+
+def _build_rag_system_instruction(
+    all_recipes: List[Dict[str, Any]],
+    current_recipe_id: Optional[int] = None,
+) -> str:
+    """Xây dựng System Instruction có gắn ngữ cảnh RAG từ CSDL CookMate."""
+    catalog_lines = []
+    active_recipe_detail = ""
+    for r in all_recipes:
+        ings = ", ".join(f"{i['name']} ({i['amount']} {i['unit']})" for i in r.get("ingredients", []))
+        nut = r.get("nutrition") or {}
+        catalog_lines.append(
+            f"- [ID {r['id']}] {r['title']} | Khẩu phần: {r.get('servings', 4)} người | "
+            f"Thời gian: {r.get('totalTime', 35)} phút | Calo: {r.get('calories', 350)} kcal | "
+            f"Đạm: {nut.get('protein', '15g')} | Nguyên liệu: {ings}"
+        )
+        if current_recipe_id and str(r["id"]) == str(current_recipe_id):
+            steps_txt = "\n".join(
+                f"  + Bước {s.get('step', idx + 1)}: {s.get('description', '')}"
+                for idx, s in enumerate(r.get("steps", []))
+            )
+            active_recipe_detail = (
+                f"\nNGƯỜI DÙNG ĐANG XEM TRỰC TIẾP MÓN ĂN:\n"
+                f"Tên món: {r['title']} (Khẩu phần gốc: {r.get('servings', 4)} người, {r.get('calories', 350)} kcal/người)\n"
+                f"Nguyên liệu: {ings}\n"
+                f"Các bước thực hiện:\n{steps_txt}\n"
+            )
+
+    catalog_text = "\n".join(catalog_lines)
+    return (
+        "Bạn là **CookMate ChefBot AI** — Trợ lý Đầu bếp AI chuyên sâu của nền tảng chia sẻ công thức nấu ăn CookMate.\n"
+        "NHIỆM VỤ & PHẠM VI (Chỉ tập trung vào Nhóm 1 & Nhóm 2 về ẩm thực):\n"
+        "1. Giải đáp TRỰC TIẾP, ĐÚNG TRỌNG TÂM câu hỏi của người dùng về nấu ăn, sơ chế khử mùi hôi/tanh (như thịt gà/heo/bò/cá bị hôi), "
+        "cấp cứu sự cố món ăn (bị cháy, khê, quá mặn, cơm nhão/sống, nước phở đục, thịt dai, quá cay/chua...), "
+        "và cách thay thế nguyên liệu cụ thể khi người dùng bị thiếu (ví dụ: không có xì dầu, thiếu nước cốt dừa, hết bột năng, thiếu rượu nấu ăn...).\n"
+        "2. Khi người dùng hỏi có nguyên liệu X, Y thì nấu món gì, hoặc hỏi về thực đơn Calo / quy đổi khẩu phần: "
+        "hãy ưu tiên đối chiếu với DANH SÁCH MÓN ĂN TRONG CSDL COOKMATE dưới đây và gợi ý thêm các món Việt Nam phù hợp.\n"
+        "3. Nếu người dùng hỏi các chủ đề hoàn toàn không liên quan đến ẩm thực/nấu ăn/dinh dưỡng/bếp núc (như lập trình, toán học, chính trị, chứng khoán...), "
+        "hãy lịch sự từ chối và nhắc rằng bạn là Trợ lý Đầu bếp AI của CookMate.\n"
+        "4. Trình bày câu trả lời bằng tiếng Việt tự nhiên, thân thiện, có gạch đầu dòng rõ ràng, in đậm (`**...**`) các bước quan trọng và đặt định lượng trong dấu backtick (`` `...` ``).\n\n"
+        f"DANH SÁCH {len(all_recipes)} MÓN ĂN HIỆN CÓ TRONG CSDL COOKMATE (RAG CONTEXT):\n"
+        f"{catalog_text}\n"
+        f"{active_recipe_detail}"
+    )
+
+
+def _call_gemini_rag(
     message: str,
-    context: Optional[Dict[str, Any]] = None,
-    db_path: Optional[str] = None,
-) -> Dict[str, Any]:
-    context = context or {}
-    raw_msg = (message or "").strip()
-    msg_norm = _normalize(raw_msg)
-    current_recipe_id = context.get("recipeId")
+    system_instruction: str,
+    api_key: str,
+    previous_interaction_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Gọi Google Gemini Interactions API (model gemini-4-hydrogen) qua SDK google-genai
+    hoặc REST endpoint chuẩn https://generativelanguage.googleapis.com/v1/interactions.
+    """
+    if not api_key:
+        return None
 
-    all_recipes = db.get_all_recipes(status="approved", db_path=db_path)
-    all_ingredients = db.get_all_ingredients(db_path=db_path)
+    # 1. Ưu tiên dùng SDK chính thức google-genai (>= 3.2.0)
+    try:
+        from google import genai  # type: ignore
 
-    if not raw_msg:
-        return {
-            "intent": "greeting",
-            "reply": (
-                "Xin chào! Mình là **Trợ lý Đầu bếp AI của CookMate** 👨‍🍳 (Chuyên giải đáp về Món ăn & Kỹ thuật nấu nướng).\n\n"
-                "Bạn có thể hỏi mình trực tiếp bất kỳ vấn đề nào trong bếp:\n"
-                "1. 🧊 **Có nguyên liệu này nấu món gì?** *(VD: \"Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?\")*\n"
-                "2. 🆘 **Xử lý sự cố & Sơ chế khử mùi:** *(VD: \"Thịt gà của tôi bị hôi xử lý bằng gì?\", \"Khi làm món ăn bị cháy xử lý như nào?\")*\n"
-                "3. 🔄 **Thay thế nguyên liệu bị thiếu:** *(VD: \"Tôi không có xì dầu\", \"Thiếu nước cốt dừa thay bằng gì?\")*\n"
-                "4. ⚖️ **Quy đổi khẩu phần & Dinh dưỡng:** *(VD: \"Phở bò cho 8 người\", \"Thực đơn 3 bữa 1500 kcal\")*"
-            ),
-            "recipes": [_format_recipe_card(r) for r in all_recipes[:2]],
-            "suggestions": [
-                "Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?",
-                "Thịt gà của tôi bị hôi có thể xử lý bằng gì?",
-                "Tôi không có xì dầu thì thay bằng gì?",
-                "Khi làm món ăn bị cháy thì xử lý như nào?",
-            ],
+        client = genai.Client(api_key=api_key)
+        req_kwargs: Dict[str, Any] = {
+            "model": GEMINI_MODEL,
+            "system_instruction": system_instruction,
+            "input": message,
         }
+        if previous_interaction_id:
+            req_kwargs["previous_interaction_id"] = previous_interaction_id
 
+        interaction = client.interactions.create(**req_kwargs)
+        output_text = getattr(interaction, "output_text", None)
+        if output_text and str(output_text).strip():
+            return {
+                "reply": str(output_text).strip(),
+                "interactionId": getattr(interaction, "id", None),
+                "model": GEMINI_MODEL,
+            }
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # 2. Fallback gọi trực tiếp REST API v1 Interactions bằng urllib chuẩn của Python
+    try:
+        url = "https://generativelanguage.googleapis.com/v1/interactions"
+        payload: Dict[str, Any] = {
+            "model": GEMINI_MODEL,
+            "system_instruction": system_instruction,
+            "input": message,
+        }
+        if previous_interaction_id:
+            payload["previous_interaction_id"] = previous_interaction_id
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data_bytes,
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=18) as resp:
+            resp_data = json.loads(resp.read().decode("utf-8"))
+            output_text = resp_data.get("output_text")
+            if not output_text:
+                # Trích xuất từ mảng steps nếu cần
+                steps = resp_data.get("steps") or []
+                texts = []
+                for st in steps:
+                    if st.get("type") == "model_output":
+                        for part in st.get("content") or []:
+                            if part.get("type") == "text" and part.get("text"):
+                                texts.append(part["text"])
+                output_text = "\n".join(texts).strip()
+            if output_text:
+                return {
+                    "reply": output_text,
+                    "interactionId": resp_data.get("id"),
+                    "model": GEMINI_MODEL,
+                }
+    except Exception:
+        pass
+
+    return None
+
+
+# ============================================================
+# MAIN ROUTER (HYBRID GEMINI RAG + LOCAL KNOWLEDGE BASE)
+# ============================================================
+
+def _generate_local_response(
+    raw_msg: str,
+    msg_norm: str,
+    all_recipes: List[Dict[str, Any]],
+    all_ingredients: List[Dict[str, Any]],
+    current_recipe_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Bộ giải đáp nội bộ (Offline Knowledge Base + SQLite CSDL CookMate)."""
     # 0. Guardrail: Từ chối lịch sự câu hỏi ngoài phạm vi ẩm thực
     if _is_off_topic(msg_norm):
         return {
@@ -872,7 +1029,7 @@ def generate_chatbot_response(
             ],
         }
 
-    # 1. Xử lý sự cố nhà bếp & Sơ chế khử mùi (Nhóm 2 - Ưu tiên số 1 để không nhầm với tìm nguyên liệu!)
+    # 1. Xử lý sự cố nhà bếp & Sơ chế khử mùi (Nhóm 2 - Ưu tiên số 1)
     rescue = _handle_kitchen_rescue(raw_msg, msg_norm)
     if rescue:
         return rescue
@@ -948,4 +1105,77 @@ def generate_chatbot_response(
             "Khi làm món ăn bị cháy thì xử lý như nào?",
             "Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?",
         ],
+    }
+
+
+def generate_chatbot_response(
+    message: str,
+    context: Optional[Dict[str, Any]] = None,
+    db_path: Optional[str] = None,
+    api_key: Optional[str] = None,
+    previous_interaction_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    context = context or {}
+    raw_msg = (message or "").strip()
+    msg_norm = _normalize(raw_msg)
+    current_recipe_id = context.get("recipeId")
+
+    all_recipes = db.get_all_recipes(status="approved", db_path=db_path)
+    all_ingredients = db.get_all_ingredients(db_path=db_path)
+    effective_key = get_configured_api_key(api_key)
+
+    if not raw_msg:
+        return {
+            "intent": "greeting",
+            "aiMode": "gemini" if effective_key else "local",
+            "hasApiKey": bool(effective_key),
+            "reply": (
+                "Xin chào! Mình là **Trợ lý Đầu bếp AI của CookMate** 👨‍🍳 (Chuyên giải đáp về Món ăn & Kỹ thuật nấu nướng).\n\n"
+                "Bạn có thể hỏi mình trực tiếp bất kỳ vấn đề nào trong bếp:\n"
+                "1. 🧊 **Có nguyên liệu này nấu món gì?** *(VD: \"Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?\")*\n"
+                "2. 🆘 **Xử lý sự cố & Sơ chế khử mùi:** *(VD: \"Thịt gà của tôi bị hôi xử lý bằng gì?\", \"Khi làm món ăn bị cháy xử lý như nào?\")*\n"
+                "3. 🔄 **Thay thế nguyên liệu bị thiếu:** *(VD: \"Tôi không có xì dầu\", \"Thiếu nước cốt dừa thay bằng gì?\")*\n"
+                "4. ⚖️ **Quy đổi khẩu phần & Dinh dưỡng:** *(VD: \"Phở bò cho 8 người\", \"Thực đơn 3 bữa 1500 kcal\")*"
+            ),
+            "recipes": [_format_recipe_card(r) for r in all_recipes[:2]],
+            "suggestions": [
+                "Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?",
+                "Thịt gà của tôi bị hôi có thể xử lý bằng gì?",
+                "Tôi không có xì dầu thì thay bằng gì?",
+                "Khi làm món ăn bị cháy thì xử lý như nào?",
+            ],
+        }
+
+    # Chạy bộ phân tích cục bộ trước để lấy intent, recipe cards khớp từ CSDL và scaledData
+    local_result = _generate_local_response(
+        raw_msg=raw_msg,
+        msg_norm=msg_norm,
+        all_recipes=all_recipes,
+        all_ingredients=all_ingredients,
+        current_recipe_id=current_recipe_id,
+    )
+
+    # Nếu đã có GEMINI_API_KEY và câu hỏi thuộc lĩnh vực ẩm thực -> Gọi Gemini RAG (gemini-4-hydrogen)
+    if effective_key and local_result.get("intent") != "off_topic":
+        sys_instruction = _build_rag_system_instruction(all_recipes, current_recipe_id=current_recipe_id)
+        gemini_resp = _call_gemini_rag(
+            message=raw_msg,
+            system_instruction=sys_instruction,
+            api_key=effective_key,
+            previous_interaction_id=previous_interaction_id,
+        )
+        if gemini_resp and gemini_resp.get("reply"):
+            return {
+                **local_result,
+                "reply": gemini_resp["reply"],
+                "interactionId": gemini_resp.get("interactionId"),
+                "aiMode": "gemini",
+                "model": gemini_resp.get("model", GEMINI_MODEL),
+                "hasApiKey": True,
+            }
+
+    return {
+        **local_result,
+        "aiMode": "local",
+        "hasApiKey": bool(effective_key),
     }

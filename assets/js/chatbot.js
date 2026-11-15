@@ -9,10 +9,35 @@
 var CookMateChefBot = (function () {
   'use strict';
 
+  var GEMINI_STORAGE_KEY = 'cookmate_gemini_api_key';
+  var GEMINI_MODEL = 'gemini-4-hydrogen';
+
   var state = {
     isOpen: false,
-    currentRecipe: null
+    currentRecipe: null,
+    lastInteractionId: null,
+    serverHasKey: false
   };
+
+  function _getSavedApiKey() {
+    try {
+      return (localStorage.getItem(GEMINI_STORAGE_KEY) || '').trim();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function _setSavedApiKey(val) {
+    var clean = String(val || '').trim();
+    try {
+      if (clean) {
+        localStorage.setItem(GEMINI_STORAGE_KEY, clean);
+      } else {
+        localStorage.removeItem(GEMINI_STORAGE_KEY);
+      }
+    } catch (e) {}
+    return clean;
+  }
 
   function _getBase() {
     if (typeof getBasePath === 'function') return getBasePath();
@@ -751,6 +776,98 @@ var CookMateChefBot = (function () {
   }
 
   // ---------------------------------------------------------------
+  // Browser-Side Gemini RAG Client (for Live Server / file:// mode)
+  // ---------------------------------------------------------------
+  function _buildBrowserRagSystemInstruction() {
+    var allRecipes = (typeof CookMateStorage !== 'undefined' && CookMateStorage.getAllRecipes)
+      ? CookMateStorage.getAllRecipes()
+      : [];
+    var activeRec = _detectCurrentRecipe();
+
+    var catalogLines = allRecipes.map(function (r) {
+      var ings = (r.ingredients || []).map(function (i) {
+        return i.name + ' (' + i.amount + ' ' + (i.unit || '') + ')';
+      }).join(', ');
+      var cal = (r.nutrition && r.nutrition.calories) || r.calories || 350;
+      var prot = (r.nutrition && r.nutrition.protein) || '15g';
+      var tTime = (parseInt(r.prepTime, 10) || 15) + (parseInt(r.cookTime, 10) || 20);
+      return '- [ID ' + r.id + '] ' + r.title + ' | Khẩu phần: ' + (r.servings || 4) +
+        ' người | Thời gian: ' + tTime + 'p | Calo: ' + cal + ' kcal | Đạm: ' + prot +
+        ' | Nguyên liệu: ' + ings;
+    }).join('\n');
+
+    var activeDetail = '';
+    if (activeRec) {
+      var stepsTxt = (activeRec.steps || []).map(function (s, idx) {
+        return '  + Bước ' + (s.step || (idx + 1)) + ': ' + s.description;
+      }).join('\n');
+      activeDetail = '\nNGƯỜI DÙNG ĐANG XEM TRỰC TIẾP MÓN ĂN:\n' +
+        'Tên món: ' + activeRec.title + ' (Khẩu phần gốc: ' + (activeRec.servings || 4) + ' người)\n' +
+        'Các bước thực hiện:\n' + stepsTxt + '\n';
+    }
+
+    return 'Bạn là **CookMate ChefBot AI** — Trợ lý Đầu bếp AI chuyên sâu của nền tảng chia sẻ công thức nấu ăn CookMate.\n' +
+      'NHIỆM VỤ & PHẠM VI (Chỉ tập trung vào Nhóm 1 & Nhóm 2 về ẩm thực):\n' +
+      '1. Giải đáp TRỰC TIẾP, ĐÚNG TRỌNG TÂM câu hỏi của người dùng về nấu ăn, sơ chế khử mùi hôi/tanh (như thịt gà/heo/bò/cá bị hôi), ' +
+      'cấp cứu sự cố món ăn (bị cháy, khê, quá mặn, cơm nhão/sống, nước phở đục, thịt dai, quá cay/chua...), ' +
+      'và cách thay thế nguyên liệu cụ thể khi người dùng bị thiếu (ví dụ: không có xì dầu, thiếu nước cốt dừa, hết bột năng, thiếu rượu nấu ăn...).\n' +
+      '2. Khi người dùng hỏi có nguyên liệu X, Y thì nấu món gì, hoặc hỏi về thực đơn Calo / quy đổi khẩu phần: ' +
+      'hãy ưu tiên đối chiếu với DANH SÁCH MÓN ĂN TRONG CSDL COOKMATE dưới đây và gợi ý thêm các món Việt Nam phù hợp.\n' +
+      '3. Nếu người dùng hỏi các chủ đề hoàn toàn không liên quan đến ẩm thực/nấu ăn/dinh dưỡng/bếp núc (như lập trình, toán học, chính trị, chứng khoán...), ' +
+      'hãy lịch sự từ chối và nhắc rằng bạn là Trợ lý Đầu bếp AI của CookMate.\n' +
+      '4. Trình bày câu trả lời bằng tiếng Việt tự nhiên, thân thiện, có gạch đầu dòng rõ ràng, in đậm (`**...**`) các bước quan trọng và đặt định lượng trong dấu backtick (`` `...` ``).\n\n' +
+      'DANH SÁCH MÓN ĂN HIỆN CÓ TRONG CSDL COOKMATE (RAG CONTEXT):\n' +
+      catalogLines + '\n' + activeDetail;
+  }
+
+  function _callGeminiBrowserDirect(message, apiKey, localRes) {
+    var payload = {
+      model: GEMINI_MODEL,
+      system_instruction: _buildBrowserRagSystemInstruction(),
+      input: message
+    };
+    if (state.lastInteractionId) {
+      payload.previous_interaction_id = state.lastInteractionId;
+    }
+
+    return fetch('https://generativelanguage.googleapis.com/v1/interactions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
+      },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Gemini API error');
+        return res.json();
+      })
+      .then(function (respData) {
+        var outText = respData.output_text || '';
+        if (!outText && Array.isArray(respData.steps)) {
+          var chunks = [];
+          respData.steps.forEach(function (st) {
+            if (st.type === 'model_output' && Array.isArray(st.content)) {
+              st.content.forEach(function (part) {
+                if (part.type === 'text' && part.text) chunks.push(part.text);
+              });
+            }
+          });
+          outText = chunks.join('\n').trim();
+        }
+        if (!outText) throw new Error('Empty Gemini output');
+        if (respData.id) state.lastInteractionId = respData.id;
+        return {
+          intent: localRes.intent,
+          reply: outText,
+          recipes: localRes.recipes || [],
+          suggestions: localRes.suggestions || [],
+          aiMode: 'gemini'
+        };
+      });
+  }
+
+  // ---------------------------------------------------------------
   // Inject Scoped Styles
   // ---------------------------------------------------------------
   function injectStyles() {
@@ -778,7 +895,7 @@ var CookMateChefBot = (function () {
       '}',
       '.cm-chefbot-panel {',
       '  position: fixed; right: 22px; bottom: 84px; z-index: 9992;',
-      '  width: 400px; max-width: calc(100vw - 24px); height: 580px; max-height: calc(100vh - 110px);',
+      '  width: 400px; max-width: calc(100vw - 24px); height: 590px; max-height: calc(100vh - 110px);',
       '  background: #FFFDF9; border: 1px solid rgba(232, 93, 42, 0.18); border-radius: 20px;',
       '  box-shadow: 0 20px 50px rgba(28, 25, 23, 0.22);',
       '  display: flex; flex-direction: column; overflow: hidden;',
@@ -795,7 +912,11 @@ var CookMateChefBot = (function () {
       '  width: 38px; height: 38px; border-radius: 12px; background: #E85D2A; color: #FFF;',
       '  display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;',
       '}',
-      '.cm-chefbot-title { font-size: 15px; font-weight: 800; line-height: 1.2; color: #FFF9F2; }',
+      '.cm-chefbot-title { font-size: 15px; font-weight: 800; line-height: 1.2; color: #FFF9F2; display: flex; align-items: center; gap: 6px; }',
+      '.cm-chefbot-badge {',
+      '  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 99px;',
+      '  background: rgba(74, 222, 128, 0.18); color: #86EFAC; border: 1px solid rgba(74, 222, 128, 0.35);',
+      '}',
       '.cm-chefbot-subtitle { font-size: 11.5px; color: #D6D3D1; display: flex; align-items: center; gap: 5px; margin-top: 2px; }',
       '.cm-chefbot-header-actions { display: flex; align-items: center; gap: 6px; }',
       '.cm-chefbot-icon-btn {',
@@ -803,7 +924,17 @@ var CookMateChefBot = (function () {
       '  border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;',
       '  font-size: 13px; transition: background 0.18s;',
       '}',
-      '.cm-chefbot-icon-btn:hover { background: rgba(255,255,255,0.24); }',
+      '.cm-chefbot-icon-btn:hover, .cm-chefbot-icon-btn.is-active { background: #E85D2A; color: #FFF; }',
+      '.cm-chefbot-key-bar {',
+      '  background: #FAF5EE; border-bottom: 1px solid #E7E0D6; padding: 10px 12px; display: none;',
+      '  flex-direction: column; gap: 6px; font-size: 11.5px; color: #44403C;',
+      '}',
+      '.cm-chefbot-key-bar.is-visible { display: flex; }',
+      '.cm-chefbot-key-row { display: flex; gap: 6px; align-items: center; }',
+      '.cm-chefbot-key-input {',
+      '  flex: 1; border: 1px solid #D6D3D1; border-radius: 8px; padding: 6px 10px; font-size: 12px; outline: none;',
+      '}',
+      '.cm-chefbot-key-input:focus { border-color: #E85D2A; }',
       '.cm-chefbot-context-bar {',
       '  background: #FFF7ED; border-bottom: 1px solid #FED7AA; padding: 7px 12px;',
       '  font-size: 11.5px; color: #9A3412; display: flex; align-items: center; justify-content: space-between; gap: 8px;',
@@ -841,6 +972,7 @@ var CookMateChefBot = (function () {
       '  border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;',
       '}',
       '.cm-chefbot-mini-btn--primary { background: #FFF0EB; color: #E85D2A; }',
+      '.cm-chefbot-mini-btn--solid { background: #E85D2A; color: #FFFFFF; }',
       '.cm-chefbot-chips {',
       '  display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; background: #FAF6F0;',
       '  border-top: 1px solid #EFEAE1; scrollbar-width: none;',
@@ -882,6 +1014,25 @@ var CookMateChefBot = (function () {
     return safe;
   }
 
+  function _updateModeBadge(isGeminiActive) {
+    var badge = document.getElementById('cmChefBotModeBadge');
+    var keyBtn = document.getElementById('cmChefBotKeyBtn');
+    if (badge) {
+      if (isGeminiActive) {
+        badge.textContent = '⚡ Gemini AI (RAG)';
+        badge.style.background = 'rgba(74, 222, 128, 0.2)';
+        badge.style.color = '#86EFAC';
+      } else {
+        badge.textContent = '📚 Tri thức Bếp';
+        badge.style.background = 'rgba(255, 255, 255, 0.14)';
+        badge.style.color = '#E7E5E4';
+      }
+    }
+    if (keyBtn) {
+      keyBtn.classList.toggle('is-active', Boolean(isGeminiActive));
+    }
+  }
+
   // ---------------------------------------------------------------
   // Build Widget DOM
   // ---------------------------------------------------------------
@@ -890,6 +1041,7 @@ var CookMateChefBot = (function () {
     injectStyles();
 
     state.currentRecipe = _detectCurrentRecipe();
+    var savedKey = _getSavedApiKey();
 
     var launcher = document.createElement('button');
     launcher.id = 'cmChefBotLauncher';
@@ -920,43 +1072,70 @@ var CookMateChefBot = (function () {
         '<div class="cm-chefbot-brand">' +
           '<div class="cm-chefbot-avatar"><i class="fa-solid fa-utensils"></i></div>' +
           '<div>' +
-            '<div class="cm-chefbot-title">CookMate ChefBot AI</div>' +
-            '<div class="cm-chefbot-subtitle"><span class="cm-chefbot-launcher__pulse"></span> Chuyên giải đáp Món ăn • Sự cố bếp • Nguyên liệu</div>' +
+            '<div class="cm-chefbot-title">CookMate ChefBot <span class="cm-chefbot-badge" id="cmChefBotModeBadge">📚 Tri thức Bếp</span></div>' +
+            '<div class="cm-chefbot-subtitle"><span class="cm-chefbot-launcher__pulse"></span> Giải đáp Món ăn • Sự cố bếp • Nguyên liệu</div>' +
           '</div>' +
         '</div>' +
         '<div class="cm-chefbot-header-actions">' +
+          '<button type="button" class="cm-chefbot-icon-btn" id="cmChefBotKeyBtn" title="Cấu hình Google Gemini API Key (RAG)"><i class="fa-solid fa-key"></i></button>' +
           '<button type="button" class="cm-chefbot-icon-btn" id="cmChefBotResetBtn" title="Làm mới cuộc trò chuyện"><i class="fa-solid fa-rotate-right"></i></button>' +
           '<button type="button" class="cm-chefbot-icon-btn" id="cmChefBotCloseBtn" title="Thu gọn"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>' +
       '</div>' +
+      '<div class="cm-chefbot-key-bar" id="cmChefBotKeyBar">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+          '<strong><i class="fa-solid fa-wand-magic-sparkles" style="color:#E85D2A;"></i> Kết nối Google Gemini AI (RAG):</strong>' +
+          '<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:#E85D2A;font-weight:700;text-decoration:none;">Lấy API Key miễn phí ↗</a>' +
+        '</div>' +
+        '<div class="cm-chefbot-key-row">' +
+          '<input type="password" class="cm-chefbot-key-input" id="cmChefBotKeyInput" placeholder="Dán GEMINI_API_KEY (AIza...) vào đây..." value="' + _escape(savedKey) + '" autocomplete="off" />' +
+          '<button type="button" class="cm-chefbot-mini-btn cm-chefbot-mini-btn--solid" id="cmChefBotKeySaveBtn">Lưu Key</button>' +
+        '</div>' +
+        '<div id="cmChefBotKeyStatus" style="font-size:11px;color:#78716C;">Khi có API Key, bot dùng mô hình <code>' + GEMINI_MODEL + '</code> kết hợp CSDL CookMate để giải đáp mọi câu hỏi tự do.</div>' +
+      '</div>' +
       contextHtml +
       '<div class="cm-chefbot-messages" id="cmChefBotMessages"></div>' +
       '<div class="cm-chefbot-chips" id="cmChefBotChips">' +
+        '<button type="button" class="cm-chefbot-chip" data-prompt="Thịt gà của tôi bị hôi có thể xử lí bằng gì?">🆘 Thịt gà bị hôi xử lý sao?</button>' +
+        '<button type="button" class="cm-chefbot-chip" data-prompt="Tôi không có xì dầu thì thay bằng gì?">🔄 Không có xì dầu thay bằng gì?</button>' +
         '<button type="button" class="cm-chefbot-chip" data-prompt="Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?">🧊 Có nguyên liệu này nấu gì?</button>' +
         '<button type="button" class="cm-chefbot-chip" data-prompt="Khi làm món ăn bị cháy thì xử lý như nào?">🔥 Món ăn bị cháy xử lý sao?</button>' +
-        '<button type="button" class="cm-chefbot-chip" data-prompt="Thiếu nước cốt dừa thì thay bằng gì?">🔄 Thiếu nguyên liệu thay bằng gì?</button>' +
-        '<button type="button" class="cm-chefbot-chip" data-prompt="Canh bị mặn quá chữa sao?">🆘 Canh bị mặn chữa sao?</button>' +
         '<button type="button" class="cm-chefbot-chip" data-prompt="Phở bò Hà Nội cho 8 người ăn">⚖️ Quy đổi khẩu phần 8 người</button>' +
         '<button type="button" class="cm-chefbot-chip" data-prompt="Thực đơn 3 bữa 1500 kcal">🥗 Tư vấn món theo Calo</button>' +
       '</div>' +
       '<form class="cm-chefbot-input-bar" id="cmChefBotForm">' +
-        '<input type="text" class="cm-chefbot-input" id="cmChefBotInput" placeholder="Hỏi về nguyên liệu sẵn có, món bị cháy/mặn, đồ thay thế..." autocomplete="off" />' +
+        '<input type="text" class="cm-chefbot-input" id="cmChefBotInput" placeholder="Hỏi bất kỳ câu hỏi nào về món ăn, khử mùi, thay nguyên liệu..." autocomplete="off" />' +
         '<button type="submit" class="cm-chefbot-send" aria-label="Gửi câu hỏi"><i class="fa-solid fa-paper-plane"></i></button>' +
       '</form>';
 
     document.body.appendChild(launcher);
     document.body.appendChild(panel);
 
+    _updateModeBadge(Boolean(savedKey));
     _bindWidgetEvents(launcher, panel);
+
+    // Kiểm tra xem Backend Flask đã có GEMINI_API_KEY trong .env chưa
+    if ((window.location.protocol === 'http:' || window.location.protocol === 'https:') && typeof fetch === 'function') {
+      fetch('/api/chatbot/config')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (cfg) {
+          if (cfg && cfg.hasApiKey) {
+            state.serverHasKey = true;
+            _updateModeBadge(true);
+          }
+        })
+        .catch(function () {});
+    }
 
     appendBotResponse({
       reply:
         'Xin chào! Mình là **Trợ lý Đầu bếp AI của CookMate** 👨‍🍳 (Chuyên giải đáp về Món ăn & Kỹ thuật nấu nướng).\n\n' +
         'Bạn có thể hỏi mình ngay về:\n' +
-        '1. 🧊 **Có nguyên liệu này nấu món gì?** *(VD: "Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?")*\n' +
-        '2. 🔥 **Xử lý sự cố khi nấu ăn:** *(VD: "Khi làm món ăn bị cháy thì xử lý như nào?", "Canh bị mặn / cơm bị nhão chữa sao?")*\n' +
-        '3. 🔄 **Thay thế nguyên liệu bị thiếu:** *(VD: "Thiếu nước cốt dừa / bột năng thay bằng gì?")*\n' +
-        '4. ⚖️ **Quy đổi khẩu phần & Dinh dưỡng:** *(VD: "Phở bò cho 8 người", "Thực đơn 3 bữa 1500 kcal")*'
+        '1. 🆘 **Sơ chế khử mùi & Xử lý sự cố:** *(VD: "Thịt gà của tôi bị hôi có thể xử lí bằng gì?", "Khi làm món ăn bị cháy xử lý như nào?")*\n' +
+        '2. 🔄 **Thay thế nguyên liệu bị thiếu:** *(VD: "Tôi không có xì dầu", "Thiếu nước cốt dừa / bột năng thay bằng gì?")*\n' +
+        '3. 🧊 **Có nguyên liệu này nấu món gì?** *(VD: "Tôi có thịt bò, trứng gà, cà chua thì nấu món gì?")*\n' +
+        '4. ⚖️ **Quy đổi khẩu phần & Dinh dưỡng:** *(VD: "Phở bò cho 8 người", "Thực đơn 3 bữa 1500 kcal")*\n\n' +
+        '💡 *Mẹo: Nhấn biểu tượng 🔑 ở góc trên để dán **Google Gemini API Key** nếu bạn muốn kích hoạt trí tuệ nhân tạo Gemini trả lời tự do mọi câu hỏi nâng cao!*'
     });
   }
 
@@ -975,9 +1154,43 @@ var CookMateChefBot = (function () {
       panel.classList.remove('is-open');
     });
 
+    document.getElementById('cmChefBotKeyBtn').addEventListener('click', function () {
+      var keyBar = document.getElementById('cmChefBotKeyBar');
+      if (keyBar) {
+        keyBar.classList.toggle('is-visible');
+      }
+    });
+
+    document.getElementById('cmChefBotKeySaveBtn').addEventListener('click', function () {
+      var keyInp = document.getElementById('cmChefBotKeyInput');
+      var statusEl = document.getElementById('cmChefBotKeyStatus');
+      var keyBar = document.getElementById('cmChefBotKeyBar');
+      var val = keyInp ? keyInp.value.trim() : '';
+      _setSavedApiKey(val);
+      _updateModeBadge(Boolean(val || state.serverHasKey));
+
+      if ((window.location.protocol === 'http:' || window.location.protocol === 'https:') && typeof fetch === 'function') {
+        fetch('/api/chatbot/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey: val })
+        }).catch(function () {});
+      }
+
+      if (statusEl) {
+        statusEl.innerHTML = val
+          ? '<span style="color:#16A34A;font-weight:700;">✅ Đã lưu Gemini API Key! Chatbot đã chuyển sang chế độ Gemini AI (RAG).</span>'
+          : '<span style="color:#D97706;font-weight:700;">ℹ️ Đã xóa Key. Chatbot đang dùng bộ Tri thức Bếp nội bộ (Offline).</span>';
+      }
+      setTimeout(function () {
+        if (keyBar) keyBar.classList.remove('is-visible');
+      }, 1200);
+    });
+
     document.getElementById('cmChefBotResetBtn').addEventListener('click', function () {
       var msgBox = document.getElementById('cmChefBotMessages');
       if (msgBox) msgBox.innerHTML = '';
+      state.lastInteractionId = null;
       sendPrompt('');
     });
 
@@ -1021,6 +1234,13 @@ var CookMateChefBot = (function () {
   function appendBotResponse(data) {
     var msgBox = document.getElementById('cmChefBotMessages');
     if (!msgBox || !data) return;
+
+    if (data.interactionId) {
+      state.lastInteractionId = data.interactionId;
+    }
+    if (data.aiMode === 'gemini' || data.hasApiKey) {
+      _updateModeBadge(true);
+    }
 
     var base = _getBase();
     var wrapper = document.createElement('div');
@@ -1067,6 +1287,7 @@ var CookMateChefBot = (function () {
       appendUserMessage(text);
     }
     var activeRec = _detectCurrentRecipe();
+    var savedKey = _getSavedApiKey();
     var contextPayload = {
       recipeId: activeRec ? activeRec.id : null,
       pagePath: window.location.pathname
@@ -1077,10 +1298,15 @@ var CookMateChefBot = (function () {
       fetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, context: contextPayload })
+        body: JSON.stringify({
+          message: text,
+          context: contextPayload,
+          apiKey: savedKey || undefined,
+          previousInteractionId: state.lastInteractionId || undefined
+        })
       })
         .then(function (res) {
-          if (!res.ok) throw new Error('Fallback to local engine');
+          if (!res.ok) throw new Error('Fallback to browser/local engine');
           return res.json();
         })
         .then(function (data) {
@@ -1088,11 +1314,23 @@ var CookMateChefBot = (function () {
         })
         .catch(function () {
           var localRes = _localFallbackEngine(text);
-          appendBotResponse(localRes);
+          if (savedKey && text && localRes.intent !== 'off_topic') {
+            _callGeminiBrowserDirect(text, savedKey, localRes)
+              .then(function (geminiData) { appendBotResponse(geminiData); })
+              .catch(function () { appendBotResponse(localRes); });
+          } else {
+            appendBotResponse(localRes);
+          }
         });
     } else {
       var localRes = _localFallbackEngine(text);
-      appendBotResponse(localRes);
+      if (savedKey && text && localRes.intent !== 'off_topic' && typeof fetch === 'function') {
+        _callGeminiBrowserDirect(text, savedKey, localRes)
+          .then(function (geminiData) { appendBotResponse(geminiData); })
+          .catch(function () { appendBotResponse(localRes); });
+      } else {
+        appendBotResponse(localRes);
+      }
     }
   }
 

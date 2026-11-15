@@ -482,7 +482,7 @@ def api_admin_reset():
 
 
 # ============================================================
-# COOKMATE CHEFBOT — AI CHATBOT API (3 FEATURE GROUPS)
+# COOKMATE CHEFBOT — AI CHATBOT API (GEMINI RAG + LOCAL KNOWLEDGE BASE)
 # ============================================================
 
 @app.route("/api/chatbot", methods=["POST"])
@@ -490,8 +490,34 @@ def api_chatbot():
     body = request.get_json(silent=True) or {}
     message = body.get("message", "")
     context = body.get("context") or {}
-    result = ai_chatbot.generate_chatbot_response(message=message, context=context)
+    api_key = body.get("apiKey") or None
+    prev_id = body.get("previousInteractionId") or None
+    result = ai_chatbot.generate_chatbot_response(
+        message=message,
+        context=context,
+        api_key=api_key,
+        previous_interaction_id=prev_id,
+    )
     return jsonify({"success": True, **result})
+
+
+@app.route("/api/chatbot/config", methods=["GET", "POST"])
+def api_chatbot_config():
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        key = str(body.get("apiKey") or "").strip()
+        ai_chatbot.save_api_key_to_env(key)
+        return jsonify({
+            "success": True,
+            "hasApiKey": bool(key),
+            "model": ai_chatbot.GEMINI_MODEL,
+        })
+    configured = ai_chatbot.get_configured_api_key()
+    return jsonify({
+        "success": True,
+        "hasApiKey": bool(configured),
+        "model": ai_chatbot.GEMINI_MODEL,
+    })
 
 
 if __name__ == "__main__":
