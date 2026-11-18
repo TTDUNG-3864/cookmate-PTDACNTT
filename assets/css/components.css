@@ -925,6 +925,7 @@
   cursor: pointer;
   transition: all var(--transition);
   white-space: nowrap;
+  flex-shrink: 0;
   text-decoration: none;
   user-select: none;
   position: relative;
@@ -1404,7 +1405,7 @@
   width: 100%;
   aspect-ratio: 16 / 10;
   overflow: hidden;
-  background-color: #FFF1E6;
+  background-color: #292524;
 }
 
 .category-card__image img {
@@ -1412,11 +1413,11 @@
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.4s ease;
+  transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .category-card:hover .category-card__image img {
-  transform: scale(1.06);
+  transform: scale(1.05);
 }
 
 .category-card__badge {
@@ -2173,35 +2174,41 @@
    ============================================ */
 .pagination {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
   padding: var(--space-6) 0;
+  max-width: 100%;
 }
 
-.pagination__item {
+.pagination__item,
+.pagination__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  height: 40px;
+  min-width: 38px;
+  height: 38px;
   padding: 0 var(--space-2);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
   color: var(--text-secondary);
+  background: var(--bg-white);
   border-radius: var(--radius);
   transition: all var(--transition);
   cursor: pointer;
-  border: 1px solid transparent;
+  border: 1px solid var(--border-light);
 }
 
-.pagination__item:hover {
+.pagination__item:hover,
+.pagination__btn:hover {
   background-color: var(--bg);
   color: var(--primary);
-  border-color: var(--border);
+  border-color: var(--primary);
 }
 
-.pagination__item.active {
+.pagination__item.active,
+.pagination__btn.active {
   background-color: var(--primary);
   color: var(--text-inverse);
   border-color: var(--primary);
@@ -2209,7 +2216,9 @@
 }
 
 .pagination__item:disabled,
-.pagination__item.disabled {
+.pagination__item.disabled,
+.pagination__btn:disabled,
+.pagination__btn.disabled {
   opacity: 0.4;
   cursor: not-allowed;
   pointer-events: none;
@@ -2218,12 +2227,24 @@
 .pagination__prev,
 .pagination__next {
   font-size: var(--text-sm);
-  gap: var(--space-2);
+  gap: 4px;
+  padding: 0 var(--space-3);
 }
 
-.pagination__ellipsis {
+.pagination__ellipsis,
+.pagination__dots {
   color: var(--text-light);
+  padding: 0 4px;
   pointer-events: none;
+}
+
+.recipe-card--skeleton {
+  overflow: hidden;
+  pointer-events: none;
+}
+.recipe-card--skeleton .skeleton--image {
+  width: 100%;
+  border-radius: 0;
 }
 
 

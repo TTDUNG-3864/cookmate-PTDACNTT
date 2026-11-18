@@ -20,29 +20,65 @@
   <header class="site-header" id="siteHeader"></header>
 
   <main>
-    <!-- Hero Banner Section -->
+    <!-- Hero Banner Section (Single Unified Smart Search Box) -->
     <section class="hero" aria-label="Banner chính">
       <div class="hero-overlay"></div>
       <div class="hero-content container">
         <h1 class="hero-title">Hôm nay ăn gì?<br>Nấu ngon chuẩn vị cùng <span class="text-primary">CookMate</span></h1>
         <p class="hero-subtitle">Hàng ngàn công thức chi tiết, tự động co giãn khẩu phần và tính dinh dưỡng cho mọi bữa ăn.</p>
-        <div class="hero-search" role="search" aria-label="Tìm kiếm công thức">
-          <div class="hero-search-box">
-            <i class="fa-solid fa-magnifying-glass hero-search-icon" aria-hidden="true"></i>
-            <input type="text" id="heroSearchInput" class="hero-search-input" placeholder="Tìm công thức, nguyên liệu..." aria-label="Nhập từ khóa tìm kiếm">
-            <button id="heroSearchBtn" class="btn btn-primary hero-search-btn" aria-label="Tìm kiếm">
+
+        <div class="hero-smart-search" role="search" aria-label="Tìm kiếm thông minh CookMate">
+          <div class="hero-mode-switch" role="tablist" aria-label="Chế độ tìm kiếm">
+            <button type="button" class="hero-mode-tab active" id="heroTabKeyword" role="tab" aria-selected="true" data-search-mode="keyword">
               <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-              <span>Tìm kiếm</span>
+              <span>Tìm món ăn / công thức</span>
+            </button>
+            <button type="button" class="hero-mode-tab" id="heroTabPantry" role="tab" aria-selected="false" data-search-mode="pantry">
+              <i class="fa-solid fa-basket-shopping" aria-hidden="true"></i>
+              <span>Có nguyên liệu gì nấu nấy</span>
             </button>
           </div>
-        </div>
-        <div class="hero-keywords" aria-label="Từ khóa gợi ý">
-          <span class="hero-keywords-label">Gợi ý:</span>
-          <button class="tag tag-outline" data-keyword="Ức Gà">#ỨcGà</button>
-          <button class="tag tag-outline" data-keyword="Món Canh">#MónCanh</button>
-          <button class="tag tag-outline" data-keyword="Món Chay">#MónChay</button>
-          <button class="tag tag-outline" data-keyword="Thịt Bò">#ThịtBò</button>
-          <button class="tag tag-outline" data-keyword="Mâm cỗ Tết">🌸 Mâm cỗ Tết</button>
+
+          <div class="hero-search">
+            <div class="hero-search-box">
+              <i class="fa-solid fa-magnifying-glass hero-search-icon" id="heroSearchLeadIcon" aria-hidden="true"></i>
+              <input type="text" id="heroSearchInput" class="hero-search-input" placeholder="Tìm món ăn, công thức hoặc nguyên liệu..." aria-label="Nhập từ khóa tìm kiếm" autocomplete="off" aria-autocomplete="list" aria-controls="pantrySuggestPopover">
+              <button type="button" id="heroSearchBtn" class="btn btn-primary hero-search-btn" aria-label="Tìm kiếm">
+                <i class="fa-solid fa-magnifying-glass" id="heroSearchBtnIcon" aria-hidden="true"></i>
+                <span id="heroSearchBtnLabel">Tìm kiếm</span>
+              </button>
+            </div>
+            <div id="pantrySuggestPopover" class="pantry-suggest-popover" role="listbox" aria-label="Gợi ý nguyên liệu" hidden></div>
+          </div>
+
+          <div class="hero-keywords" id="heroKeywordPane" aria-label="Từ khóa gợi ý">
+            <span class="hero-keywords-label">Gợi ý:</span>
+            <button type="button" class="tag tag-outline" data-keyword="Ức Gà">#ỨcGà</button>
+            <button type="button" class="tag tag-outline" data-keyword="Phở Bò">#PhởBò</button>
+            <button type="button" class="tag tag-outline" data-keyword="Món Canh">#MónCanh</button>
+            <button type="button" class="tag tag-outline" data-keyword="Món Chay">#MónChay</button>
+            <button type="button" class="tag tag-outline" data-keyword="Mâm cỗ Tết">🌸 Mâm cỗ Tết</button>
+          </div>
+
+          <div class="hero-pantry-tray" id="heroPantryPane" hidden>
+            <div class="hero-pantry-quick">
+              <span class="hero-keywords-label">Chọn nhanh tủ lạnh:</span>
+              <button type="button" class="tag tag-outline" data-pantry-quick="Thịt gà">+ Thịt gà</button>
+              <button type="button" class="tag tag-outline" data-pantry-quick="Cà chua">+ Cà chua</button>
+              <button type="button" class="tag tag-outline" data-pantry-quick="Trứng gà">+ Trứng gà</button>
+              <button type="button" class="tag tag-outline" data-pantry-quick="Đậu hũ">+ Đậu hũ</button>
+              <button type="button" class="tag tag-outline" data-pantry-quick="Thịt bò">+ Thịt bò</button>
+            </div>
+            <div id="ingredientMatcherSelected" class="ingredient-matcher-selected" aria-live="polite"></div>
+            <div class="ingredient-matcher-actions">
+              <button class="btn btn-primary" id="ingredientMatcherFind" type="button">
+                <i class="fa-solid fa-utensils" aria-hidden="true"></i>
+                <span>Tìm món phù hợp</span>
+              </button>
+              <span id="ingredientMatcherStatus" class="ingredient-matcher-status" role="status" aria-live="polite"></span>
+            </div>
+            <div id="ingredientMatcherResults" class="ingredient-matcher-results" aria-live="polite"></div>
+          </div>
         </div>
       </div>
     </section>
@@ -146,7 +182,333 @@
       renderHomeRecipes('all');
       renderOccasionSection();
       setupHeroSearch();
+      setupIngredientMatcher();
     });
+
+    var heroSearchMode = 'keyword';
+    var matcherIngredients = [];
+    var pantrySuggestItems = [];
+    var pantrySuggestIndex = -1;
+
+    var PANTRY_SYNONYM_HINTS = {
+      'bot ngo': 'bột bắp',
+      'bot san': 'bột năng',
+      'ca qua': 'cá lóc',
+      'ca chuoi': 'cá lóc',
+      'ca trau': 'cá lóc',
+      'dau phu': 'đậu hũ',
+      'tau hu': 'tào phớ',
+      'thom': 'dứa',
+      'khom': 'dứa',
+      'cu nen': 'hành tăm',
+      'moc nhi': 'nấm mèo',
+      'lac': 'đậu phộng',
+      'vung': 'mè rang',
+      'ba roi': 'thịt ba chỉ',
+      'thit lon': 'thịt heo',
+      'sua tuoi': 'sứa biển tươi'
+    };
+
+    function getIngredientCategoryIcon(cat) {
+      var c = String(cat || '').toLowerCase();
+      if (c.indexOf('thịt') !== -1) return 'fa-drumstick-bite';
+      if (c.indexOf('hải sản') !== -1) return 'fa-fish-fins';
+      if (c.indexOf('rau') !== -1) return 'fa-carrot';
+      if (c.indexOf('nấm') !== -1) return 'fa-seedling';
+      if (c.indexOf('trái cây') !== -1) return 'fa-apple-whole';
+      if (c.indexOf('trứng') !== -1 || c.indexOf('sữa') !== -1) return 'fa-egg';
+      if (c.indexOf('chay') !== -1) return 'fa-leaf';
+      if (c.indexOf('ngũ cốc') !== -1 || c.indexOf('bột') !== -1 || c.indexOf('hạt') !== -1) return 'fa-wheat-awn';
+      if (c.indexOf('đồ uống') !== -1) return 'fa-mug-hot';
+      return 'fa-mortar-pestle';
+    }
+
+    function hidePantryPopover() {
+      var pop = document.getElementById('pantrySuggestPopover');
+      if (pop) {
+        pop.hidden = true;
+        pop.innerHTML = '';
+      }
+      pantrySuggestItems = [];
+      pantrySuggestIndex = -1;
+    }
+
+    function computePantrySuggestions(rawQuery) {
+      var inventory = CookMateStorage.getAllIngredients() || [];
+      var selectedLower = {};
+      matcherIngredients.forEach(function(sel) {
+        selectedLower[String(sel.name || '').toLocaleLowerCase()] = true;
+      });
+      var qTrim = String(rawQuery || '').trim();
+      var qNfc = qTrim.toLocaleLowerCase();
+      var qAsc = typeof _normAsciiWords === 'function' ? _normAsciiWords(qTrim) : qNfc;
+      var synTarget = PANTRY_SYNONYM_HINTS[qAsc] ? PANTRY_SYNONYM_HINTS[qAsc] : '';
+      var synTargetAsc = synTarget && typeof _normAsciiWords === 'function' ? _normAsciiWords(synTarget) : '';
+
+      var scored = [];
+      inventory.forEach(function(item) {
+        if (!item || !item.name) return;
+        var nameLow = item.name.toLocaleLowerCase();
+        if (selectedLower[nameLow]) return;
+        var nameAsc = typeof _normAsciiWords === 'function' ? _normAsciiWords(item.name) : nameLow;
+        if (!qTrim) {
+          scored.push({ score: item.popular ? 50 : 10, item: item });
+          return;
+        }
+        var sc = 0;
+        if (nameLow === qNfc || nameAsc === qAsc) sc = 120;
+        else if (synTargetAsc && nameAsc.indexOf(synTargetAsc) !== -1) sc = 110;
+        else if (nameLow.indexOf(qNfc) === 0) sc = 100;
+        else if (nameAsc.indexOf(qAsc) === 0) sc = 92;
+        else if (nameLow.indexOf(' ' + qNfc) !== -1) sc = 84;
+        else if (nameAsc.indexOf(' ' + qAsc) !== -1) sc = 78;
+        else if (qAsc.length >= 2 && nameAsc.indexOf(qAsc) !== -1) sc = 65;
+        if (sc > 0) {
+          if (item.popular) sc += 4;
+          scored.push({ score: sc, item: item });
+        }
+      });
+
+      scored.sort(function(a, b) {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.item.name.localeCompare(b.item.name, 'vi');
+      });
+      return scored.slice(0, 12).map(function(s) { return s.item; });
+    }
+
+    function renderPantryPopover(rawQuery) {
+      var pop = document.getElementById('pantrySuggestPopover');
+      if (!pop || heroSearchMode !== 'pantry') {
+        hidePantryPopover();
+        return;
+      }
+      var list = computePantrySuggestions(rawQuery);
+      pantrySuggestItems = list;
+      pantrySuggestIndex = list.length ? 0 : -1;
+      if (!list.length) {
+        hidePantryPopover();
+        return;
+      }
+      pop.innerHTML = '<div class="pantry-suggest-grid">' + list.map(function(item, idx) {
+        var iconCls = getIngredientCategoryIcon(item.category);
+        var catLabel = item.category || 'Nguyên liệu';
+        return '<button type="button" class="pantry-suggest-item' + (idx === 0 ? ' is-active' : '') + '" role="option" aria-selected="' + (idx === 0 ? 'true' : 'false') + '" data-suggest-idx="' + idx + '">' +
+          '<span class="pantry-suggest-icon"><i class="fa-solid ' + iconCls + '" aria-hidden="true"></i></span>' +
+          '<span class="pantry-suggest-name">' + escapeHtml(item.name) + '</span>' +
+          '<span class="pantry-suggest-cat">' + escapeHtml(catLabel) + '</span>' +
+        '</button>';
+      }).join('') + '</div>';
+      pop.hidden = false;
+
+      pop.querySelectorAll('[data-suggest-idx]').forEach(function(btn) {
+        btn.addEventListener('mousedown', function(ev) {
+          ev.preventDefault();
+          var chosen = pantrySuggestItems[Number(btn.getAttribute('data-suggest-idx'))];
+          if (chosen) {
+            addMatcherIngredientByName(chosen.name);
+            var inp = document.getElementById('heroSearchInput');
+            if (inp) {
+              inp.value = '';
+              inp.focus();
+            }
+            hidePantryPopover();
+          }
+        });
+      });
+    }
+
+    function highlightPantrySuggest(nextIdx) {
+      var pop = document.getElementById('pantrySuggestPopover');
+      if (!pop || pop.hidden || !pantrySuggestItems.length) return;
+      var len = pantrySuggestItems.length;
+      pantrySuggestIndex = ((nextIdx % len) + len) % len;
+      var buttons = pop.querySelectorAll('[data-suggest-idx]');
+      buttons.forEach(function(btn, i) {
+        var active = i === pantrySuggestIndex;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        if (active && btn.scrollIntoView) btn.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    function setHeroSearchMode(mode) {
+      heroSearchMode = (mode === 'pantry') ? 'pantry' : 'keyword';
+      var input = document.getElementById('heroSearchInput');
+      var leadIcon = document.getElementById('heroSearchLeadIcon');
+      var btnIcon = document.getElementById('heroSearchBtnIcon');
+      var btnLabel = document.getElementById('heroSearchBtnLabel');
+      var kwPane = document.getElementById('heroKeywordPane');
+      var pantryPane = document.getElementById('heroPantryPane');
+
+      document.querySelectorAll('.hero-mode-tab').forEach(function(tab) {
+        var active = tab.getAttribute('data-search-mode') === heroSearchMode;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+
+      if (heroSearchMode === 'pantry') {
+        if (input) {
+          input.value = '';
+          input.placeholder = 'Nhập nguyên liệu trong tủ lạnh (VD: Cá basa, Bột bắp, Thịt gà)...';
+          input.setAttribute('aria-label', 'Nhập nguyên liệu đang có trong tủ lạnh');
+        }
+        if (leadIcon) leadIcon.className = 'fa-solid fa-basket-shopping hero-search-icon';
+        if (btnIcon) btnIcon.className = 'fa-solid fa-plus';
+        if (btnLabel) btnLabel.textContent = 'Thêm';
+        if (kwPane) kwPane.hidden = true;
+        if (pantryPane) pantryPane.hidden = false;
+      } else {
+        hidePantryPopover();
+        if (input) {
+          input.placeholder = 'Tìm món ăn, công thức hoặc nguyên liệu...';
+          input.setAttribute('aria-label', 'Nhập từ khóa tìm kiếm');
+        }
+        if (leadIcon) leadIcon.className = 'fa-solid fa-magnifying-glass hero-search-icon';
+        if (btnIcon) btnIcon.className = 'fa-solid fa-magnifying-glass';
+        if (btnLabel) btnLabel.textContent = 'Tìm kiếm';
+        if (kwPane) kwPane.hidden = false;
+        if (pantryPane) pantryPane.hidden = true;
+      }
+    }
+
+    function setupIngredientMatcher() {
+      var input = document.getElementById('heroSearchInput');
+      document.querySelectorAll('.hero-mode-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          setHeroSearchMode(tab.getAttribute('data-search-mode'));
+          if (input) input.focus();
+        });
+      });
+      if (input) {
+        input.addEventListener('focus', function() {
+          if (heroSearchMode === 'pantry') renderPantryPopover(input.value);
+        });
+        input.addEventListener('input', function() {
+          if (heroSearchMode === 'pantry') renderPantryPopover(input.value);
+        });
+      }
+      document.addEventListener('click', function(ev) {
+        var box = document.querySelector('.hero-search');
+        if (box && !box.contains(ev.target)) hidePantryPopover();
+      });
+      document.querySelectorAll('[data-pantry-quick]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          addMatcherIngredientByName(btn.getAttribute('data-pantry-quick'));
+        });
+      });
+      var findBtn = document.getElementById('ingredientMatcherFind');
+      if (findBtn) findBtn.addEventListener('click', findMatcherRecipes);
+      renderMatcherIngredients();
+    }
+
+    function addMatcherIngredientByName(rawVal) {
+      var value = String(rawVal || '').trim();
+      if (!value) return;
+      var inventory = CookMateStorage.getAllIngredients();
+      var vLow = value.toLocaleLowerCase();
+      var vAsc = typeof _normAsciiWords === 'function' ? _normAsciiWords(value) : vLow;
+      var item = inventory.find(function(ingredient) { return ingredient.name.toLocaleLowerCase() === vLow; });
+      if (!item) {
+        item = inventory.find(function(ingredient) {
+          return (typeof _normAsciiWords === 'function' ? _normAsciiWords(ingredient.name) : ingredient.name.toLocaleLowerCase()) === vAsc;
+        });
+      }
+      var selected = item ? { id: item.id, name: item.name } : { id: null, name: value };
+      if (!matcherIngredients.some(function(existing) { return existing.name.toLocaleLowerCase() === selected.name.toLocaleLowerCase(); })) {
+        matcherIngredients.push(selected);
+      }
+      renderMatcherIngredients();
+      var results = document.getElementById('ingredientMatcherResults');
+      var status = document.getElementById('ingredientMatcherStatus');
+      if (results) results.innerHTML = '';
+      if (status) status.textContent = '';
+    }
+
+    function addMatcherIngredient() {
+      var input = document.getElementById('heroSearchInput');
+      if (!input) return;
+      var pop = document.getElementById('pantrySuggestPopover');
+      if (pop && !pop.hidden && pantrySuggestIndex >= 0 && pantrySuggestItems[pantrySuggestIndex] && input.value.trim().indexOf(',') === -1) {
+        addMatcherIngredientByName(pantrySuggestItems[pantrySuggestIndex].name);
+        input.value = '';
+        hidePantryPopover();
+        return;
+      }
+      var value = input.value.trim();
+      if (!value) return;
+      value.split(',').forEach(function(part) {
+        if (part.trim()) addMatcherIngredientByName(part.trim());
+      });
+      input.value = '';
+      hidePantryPopover();
+    }
+
+    function renderMatcherIngredients() {
+      var target = document.getElementById('ingredientMatcherSelected');
+      if (!target) return;
+      target.innerHTML = matcherIngredients.map(function(item, index) {
+        return '<span class="ingredient-matcher-chip">' + escapeHtml(item.name) +
+          '<button type="button" data-remove-ingredient="' + index + '" aria-label="Xóa ' + escapeHtml(item.name) + '"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></span>';
+      }).join('');
+      target.querySelectorAll('[data-remove-ingredient]').forEach(function(button) {
+        button.addEventListener('click', function() {
+          matcherIngredients.splice(Number(button.dataset.removeIngredient), 1);
+          renderMatcherIngredients();
+        });
+      });
+    }
+
+    function findMatcherRecipes() {
+      var input = document.getElementById('heroSearchInput');
+      if (input && input.value.trim()) {
+        addMatcherIngredient();
+      }
+      hidePantryPopover();
+      var status = document.getElementById('ingredientMatcherStatus');
+      var results = document.getElementById('ingredientMatcherResults');
+      if (!matcherIngredients.length) {
+        status.textContent = 'Hãy thêm ít nhất 1 nguyên liệu để gợi ý món.';
+        return;
+      }
+      status.textContent = 'Đang đối chiếu kho 300 công thức CookMate...';
+      results.innerHTML = '';
+      CookMateStorage._apiRequest('POST', '/api/recommendations/match', {
+        ingredientIds: matcherIngredients.map(function(item) { return item.id; }).filter(Boolean),
+        ingredientNames: matcherIngredients.map(function(item) { return item.name; })
+      }).then(function(data) {
+        var matches = (data.matches || []).slice(0, 6);
+        var fullMatch = data.fullMatch !== false;
+        if (!matches.length) {
+          status.textContent = 'Chưa tìm thấy món nào khớp nguyên liệu đã chọn.';
+          return;
+        }
+        status.textContent = fullMatch
+          ? ('Tìm thấy ' + matches.length + ' món kết hợp đủ nguyên liệu bạn đã chọn:')
+          : 'Gợi ý các món gần nhất từ kho 300 món CookMate:';
+        var bannerHtml = (!fullMatch && data.notice)
+          ? '<div class="ingredient-matcher-fallback-banner"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> <span>' + escapeHtml(data.notice) + '</span></div>'
+          : '';
+        results.innerHTML = bannerHtml + matches.map(function(item) {
+          var missing = item.missing && item.missing.length ? ('Cần chuẩn bị thêm: ' + item.missing.slice(0, 3).join(', ')) : 'Đã đủ toàn bộ nguyên liệu chính!';
+          var href = item.recipeId ? 'pages/recipe-detail.html?id=' + encodeURIComponent(item.recipeId) : 'pages/recipes.html';
+          var thumb = item.image ? getImageUrl(item.image) : getCategoryFallbackImage(item.categoryId || '1');
+          var calTxt = item.calories ? (' · ' + escapeHtml(item.calories) + ' kcal') : '';
+          var mCnt = item.matchedUserCount || matcherIngredients.length;
+          var tCnt = item.totalUserCount || matcherIngredients.length;
+          var comboBadge = item.fullIngredientMatch !== false
+            ? '<span class="ingredient-match-combo-badge"><i class="fa-solid fa-check-double" aria-hidden="true"></i> Khớp đủ ' + escapeHtml(mCnt + '/' + tCnt) + ' nguyên liệu đã chọn</span>'
+            : '<span class="ingredient-match-combo-badge is-partial">Khớp ' + escapeHtml(mCnt + '/' + tCnt) + ' nguyên liệu</span>';
+          return '<article class="ingredient-match-card">' +
+            '<img class="ingredient-match-thumb" src="' + escapeHtml(thumb) + '" alt="' + escapeHtml(item.name) + '" loading="lazy" onerror="handleImageError(this)">' +
+            '<div class="ingredient-match-body"><div class="ingredient-match-title-row"><h3>' + escapeHtml(item.name) + '</h3>' + comboBadge + '</div>' +
+            '<p class="ingredient-match-meta"><strong>Sẵn sàng ' + escapeHtml(item.score) + '% nguyên liệu chính</strong> · ' + escapeHtml(item.cookTime || 25) + ' phút' + calTxt + '</p>' +
+            '<p class="ingredient-match-missing">' + escapeHtml(missing) + '</p></div>' +
+            '<a class="btn btn-primary btn-sm ingredient-match-link" href="' + href + '">Xem món <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a></article>';
+        }).join('');
+      }).catch(function(error) {
+        status.textContent = error.message || 'Không thể tìm công thức ngay bây giờ.';
+      });
+    }
 
     function renderHomeCategories() {
       var grid = document.getElementById('homeCategoryGrid');
@@ -228,8 +590,9 @@
         activeOccasion = occ;
         renderPills();
         var filtered = recipes.filter(function(r) { return r.occasion === occ; });
-        grid.innerHTML = filtered.length > 0
-          ? filtered.map(function(r) { return CookMateUI.createRecipeCard(r, { linkBase: '' }); }).join('')
+        var preview = filtered.slice(0, 6);
+        grid.innerHTML = preview.length > 0
+          ? preview.map(function(r) { return CookMateUI.createRecipeCard(r, { linkBase: '' }); }).join('')
           : CookMateUI.createEmptyState('fa-calendar', 'Chưa có công thức cho dịp này', '');
       };
 
@@ -242,10 +605,41 @@
       var btn = document.getElementById('heroSearchBtn');
       if (input) {
         input.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter') doHeroSearch();
+          if (heroSearchMode === 'pantry') {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              highlightPantrySuggest(pantrySuggestIndex + 1);
+              return;
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              highlightPantrySuggest(pantrySuggestIndex - 1);
+              return;
+            }
+            if (e.key === 'Escape') {
+              hidePantryPopover();
+              return;
+            }
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (heroSearchMode === 'pantry') {
+              addMatcherIngredient();
+            } else {
+              doHeroSearch();
+            }
+          }
         });
       }
-      if (btn) btn.addEventListener('click', doHeroSearch);
+      if (btn) {
+        btn.addEventListener('click', function() {
+          if (heroSearchMode === 'pantry') {
+            addMatcherIngredient();
+          } else {
+            doHeroSearch();
+          }
+        });
+      }
 
       document.querySelectorAll('[data-keyword]').forEach(function(btn) {
         btn.addEventListener('click', function() {

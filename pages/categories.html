@@ -45,6 +45,7 @@
         <div class="recipe-grid" id="categoryRecipeGrid" role="list" aria-label="Công thức trong danh mục" style="display:none;">
           <!-- Populated by JS -->
         </div>
+        <div id="categoryPagination"></div>
       </div>
     </section>
   </main>
@@ -76,11 +77,13 @@
     function renderAllCategories() {
       var grid = document.getElementById('allCategoryGrid');
       var recipeGrid = document.getElementById('categoryRecipeGrid');
+      var pagEl = document.getElementById('categoryPagination');
       var backBtn = document.getElementById('backToCategoriesBtn');
       if (!grid) return;
 
       grid.style.display = '';
       if (recipeGrid) recipeGrid.style.display = 'none';
+      if (pagEl) pagEl.innerHTML = '';
       if (backBtn) backBtn.style.display = 'none';
 
       var cats = CookMateStorage.getAllCategories();
@@ -127,13 +130,24 @@
       var recipes = CookMateStorage.getAllRecipes().filter(function(r) {
         return r.categoryId === numCatId || r.categoryId == categoryId;
       });
+      var pagEl = document.getElementById('categoryPagination');
 
       if (recipes.length === 0) {
         grid.innerHTML = CookMateUI.createEmptyState('fa-book-open', 'Chưa có công thức nào', 'Danh mục này hiện chưa có công thức.');
+        if (pagEl) pagEl.innerHTML = '';
         return;
       }
 
-      grid.innerHTML = recipes.map(function(r) { return CookMateUI.createRecipeCard(r); }).join('');
+      var perPage = 12;
+      var totalPages = Math.ceil(recipes.length / perPage);
+      window.renderCatPage = function(page) {
+        var cur = Math.max(1, Math.min(totalPages, page || 1));
+        var slice = recipes.slice((cur - 1) * perPage, cur * perPage);
+        grid.innerHTML = slice.map(function(r) { return CookMateUI.createRecipeCard(r); }).join('');
+        if (pagEl) pagEl.innerHTML = CookMateUI.createPagination(cur, totalPages, 'renderCatPage');
+        if (page) window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      window.renderCatPage(1);
     }
   </script>
 </body>

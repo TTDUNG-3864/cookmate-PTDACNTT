@@ -37,6 +37,7 @@
         <div class="recipe-grid" id="featuredRecipeGrid" role="list" aria-label="Công thức nổi bật">
           <!-- Populated by JS -->
         </div>
+        <div id="featuredRecipePagination"></div>
       </div>
     </section>
   </main>
@@ -62,18 +63,29 @@
         .filter(function(r) { return r.isFeatured; })
         .sort(function(a, b) { return (b.views || 0) - (a.views || 0); });
 
+      var pagEl = document.getElementById('featuredRecipePagination');
       if (recipes.length === 0) {
         grid.innerHTML = CookMateUI.createEmptyState(
           'fa-fire-flame-curved',
           'Chưa có công thức nổi bật',
           'Các công thức được đánh giá cao sẽ xuất hiện tại đây.'
         );
+        if (pagEl) pagEl.innerHTML = '';
         return;
       }
 
-      grid.innerHTML = recipes.map(function(r) {
-        return CookMateUI.createRecipeCard(r, { showFeaturedBadge: true });
-      }).join('');
+      var perPage = 12;
+      var totalPages = Math.ceil(recipes.length / perPage);
+      window.goToFeaturedPage = function(page) {
+        var cur = Math.max(1, Math.min(totalPages, page || 1));
+        var slice = recipes.slice((cur - 1) * perPage, cur * perPage);
+        grid.innerHTML = slice.map(function(r) {
+          return CookMateUI.createRecipeCard(r, { showFeaturedBadge: true });
+        }).join('');
+        if (pagEl) pagEl.innerHTML = CookMateUI.createPagination(cur, totalPages, 'goToFeaturedPage');
+        if (page) window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      window.goToFeaturedPage(1);
     });
   </script>
 </body>

@@ -68,6 +68,7 @@ html {
   -webkit-text-size-adjust: 100%;
   -moz-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--header-height, 72px) + 24px);
 }
 
 @media (prefers-reduced-motion: reduce) {

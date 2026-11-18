@@ -336,13 +336,20 @@
 
   /* Pagination compact */
   .pagination {
-    gap: 0;
+    gap: 4px;
+    padding: var(--space-4) 0;
   }
 
-  .pagination__item {
-    min-width: 36px;
-    height: 36px;
+  .pagination__item,
+  .pagination__btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 6px;
     font-size: var(--text-xs);
+  }
+
+  .pagination__label {
+    display: none;
   }
 
   /* Tables scroll horizontally */

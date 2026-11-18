@@ -42,6 +42,7 @@
         <div class="recipe-grid" id="holidayRecipeGrid" role="list" aria-label="Công thức theo dịp lễ">
           <!-- Populated by JS -->
         </div>
+        <div id="holidayPagination"></div>
       </div>
     </section>
   </main>
@@ -102,10 +103,21 @@
         window.history.replaceState({}, '', url);
 
         var filtered = recipes.filter(function(r) { return r.occasion === occ; });
+        var pagEl = document.getElementById('holidayPagination');
         if (filtered.length === 0) {
           grid.innerHTML = CookMateUI.createEmptyState('fa-calendar', 'Chưa có công thức cho dịp "' + occ + '"', 'Hãy chọn dịp lễ khác.');
+          if (pagEl) pagEl.innerHTML = '';
         } else {
-          grid.innerHTML = filtered.map(function(r) { return CookMateUI.createRecipeCard(r); }).join('');
+          var perPage = 12;
+          var totalPages = Math.ceil(filtered.length / perPage);
+          window.goToHolidayPage = function(page) {
+            var cur = Math.max(1, Math.min(totalPages, page || 1));
+            var slice = filtered.slice((cur - 1) * perPage, cur * perPage);
+            grid.innerHTML = slice.map(function(r) { return CookMateUI.createRecipeCard(r); }).join('');
+            if (pagEl) pagEl.innerHTML = CookMateUI.createPagination(cur, totalPages, 'goToHolidayPage');
+            if (page) window.scrollTo({ top: 0, behavior: 'smooth' });
+          };
+          window.goToHolidayPage(1);
         }
       };
 

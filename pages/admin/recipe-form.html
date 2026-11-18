@@ -563,7 +563,8 @@
       var desc = document.getElementById('adminRecipeDesc').value.trim();
       var catId = document.getElementById('adminRecipeCategory').value;
       var occasion = document.getElementById('adminRecipeOccasion').value;
-      var image = document.getElementById('adminRecipeImage').value.trim() || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=80';
+      var fallbackCatImg = typeof getCategoryFallbackImage === 'function' ? getCategoryFallbackImage(catId) : '../../assets/images/categories/mon-chinh.svg';
+      var image = document.getElementById('adminRecipeImage').value.trim() || fallbackCatImg;
       var prepTime = parseInt(document.getElementById('adminPrepTime').value, 10) || 15;
       var cookTime = parseInt(document.getElementById('adminCookTime').value, 10) || 30;
       var difficulty = document.getElementById('adminDifficulty').value || 'Trung bình';
@@ -628,17 +629,27 @@
         isNew: true
       };
 
-      if (isEdit && editId) {
-        CookMateStorage.updateRecipe(editId, data, currentUser);
-        CookMateUI.showToast('Đã cập nhật công thức thành công!', 'success');
-      } else {
-        CookMateStorage.addRecipe(data, currentUser);
-        CookMateUI.showToast('Đã thêm và xuất bản công thức công khai ngay!', 'success');
-      }
+      var savePromise = (isEdit && editId)
+        ? CookMateStorage.updateRecipe(editId, data)
+        : CookMateStorage.addRecipe(data);
 
-      setTimeout(function() {
-        window.location.href = 'recipes.html';
-      }, 800);
+      Promise.resolve(savePromise).then(function() {
+        CookMateUI.showToast(
+          (isEdit && editId)
+            ? 'Đã cập nhật công thức thành công!'
+            : 'Đã thêm và xuất bản công thức công khai ngay!',
+          'success'
+        );
+        setTimeout(function() {
+          window.location.href = 'recipes.html';
+        }, 700);
+      }).catch(function(err) {
+        CookMateUI.showToast((err && err.message) || 'Không thể lưu công thức. Vui lòng thử lại.', 'error');
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Lưu &amp; Xuất bản ngay';
+        }
+      });
     }
   </script>
 </body>

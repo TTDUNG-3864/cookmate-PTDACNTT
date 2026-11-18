@@ -99,16 +99,15 @@
               </select>
             </div>
 
-            <!-- Test Shortcuts Box -->
-            <div class="filter-test-box">
-              <span class="text-xs font-bold text-secondary uppercase block mb-2">Thử nghiệm luồng rẽ nhánh:</span>
-              <div class="flex flex-col gap-1.5">
-                <button type="button" class="btn btn-ghost btn-sm text-left justify-start" onclick="testEmptySearch()">
-                  <i class="fa-solid fa-circle-exclamation text-warning mr-1"></i> 1. Thử bỏ trống từ khóa
-                </button>
-                <button type="button" class="btn btn-ghost btn-sm text-left justify-start" onclick="testNoResultSearch()">
-                  <i class="fa-solid fa-circle-question text-info mr-1"></i> 2. Thử từ khóa không tồn tại
-                </button>
+            <!-- Quick Suggestions Box -->
+            <div class="filter-quick-box">
+              <span class="text-xs font-bold text-secondary uppercase block mb-2">Gợi ý tìm kiếm nhanh:</span>
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="quickSearchKeyword('Phở')">Phở bò / gà</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="quickSearchKeyword('Thịt kho')">Thịt kho</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="quickSearchKeyword('Canh chua')">Canh chua</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="quickSearchKeyword('Chay')">Món chay</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="quickSearchKeyword('Gà nướng')">Gà nướng</button>
               </div>
             </div>
 
@@ -122,6 +121,7 @@
               Đang tải kết quả...
             </div>
             <div class="search-sort-wrapper">
+              <button id="aiSearchBtn" type="button" class="btn btn-primary btn-sm" onclick="searchRecipesWithAI()">Tìm thêm bằng AI</button>
               <label for="searchSort" class="text-xs text-secondary mr-2">Sắp xếp:</label>
               <select id="searchSort" class="form-select form-select-sm" onchange="applyFilters()">
                 <option value="relevance">Phù hợp nhất</option>
@@ -132,9 +132,12 @@
             </div>
           </div>
 
+          <section id="aiSearchResults" class="card p-4 mb-4" style="display:none" aria-live="polite"></section>
+
           <div class="recipe-grid" id="searchResultsGrid">
             <!-- Populated by JS -->
           </div>
+          <div id="searchPagination"></div>
         </section>
 
       </div>
@@ -313,18 +316,27 @@
         });
       }
 
-      // 6. Sắp xếp kết quả
+      // 6. Sắp xếp kết quả (Thang điểm Relevance 100 / 85 / 60 khi chọn "Phù hợp nhất")
       if (sortVal === 'newest') {
         recipes.sort(function(a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
       } else if (sortVal === 'views') {
         recipes.sort(function(a, b) { return (b.views || 0) - (a.views || 0); });
       } else if (sortVal === 'rating') {
         recipes.sort(function(a, b) { return (b.rating || 0) - (a.rating || 0); });
+      } else if (keyword && typeof scoreRecipeSearch === 'function') {
+        recipes.sort(function(a, b) {
+          var diff = scoreRecipeSearch(b, keyword) - scoreRecipeSearch(a, keyword);
+          if (diff !== 0) return diff;
+          var rDiff = (b.rating || 0) - (a.rating || 0);
+          if (rDiff !== 0) return rDiff;
+          return (b.id || 0) - (a.id || 0);
+        });
       }
 
-      // 7. Hiển thị tóm tắt và kết quả
+      // 7. Hiển thị tóm tắt và kết quả (kèm phân trang cửa sổ 12 món/trang)
       var summaryEl = document.getElementById('resultsCountSummary');
       var grid = document.getElementById('searchResultsGrid');
+      var pagEl = document.getElementById('searchPagination');
 
       if (summaryEl) {
         summaryEl.innerHTML = `Tìm thấy <strong>${recipes.length}</strong> công thức phù hợp ${keyword ? `cho từ khóa "<em>${escapeHtml(keyword)}</em>"` : ''}`;
@@ -337,6 +349,7 @@
           notice.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i> Không tìm thấy công thức nào khớp với từ khóa "<strong>${escapeHtml(keyword)}</strong>". Vui lòng thử từ khóa khác hoặc bấm "Đặt lại" để xem toàn bộ món ăn.`;
           notice.style.display = 'block';
         }
+        if (pagEl) pagEl.innerHTML = '';
 
         grid.innerHTML = CookMateUI.createEmptyState(
           'fa-magnifying-glass',
@@ -345,10 +358,45 @@
           '<button class="btn btn-secondary mt-4" onclick="resetAllFilters()"><i class="fa-solid fa-rotate-left"></i> Đặt lại bộ lọc</button>'
         );
       } else {
-        grid.innerHTML = recipes.map(function(r) {
-          return CookMateUI.createRecipeCard(r);
-        }).join('');
+        var perPage = 12;
+        var totalPages = Math.ceil(recipes.length / perPage);
+        window.goToSearchPage = function(page) {
+          var cur = Math.max(1, Math.min(totalPages, page || 1));
+          var slice = recipes.slice((cur - 1) * perPage, cur * perPage);
+          grid.innerHTML = slice.map(function(r) {
+            return CookMateUI.createRecipeCard(r);
+          }).join('');
+          if (pagEl) pagEl.innerHTML = CookMateUI.createPagination(cur, totalPages, 'goToSearchPage');
+          if (page) window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+        window.goToSearchPage(1);
       }
+    }
+
+    function searchRecipesWithAI() {
+      var input=document.getElementById('searchInput');
+      var query=input?input.value.trim():'';
+      var button=document.getElementById('aiSearchBtn');
+      var panel=document.getElementById('aiSearchResults');
+      if(!query){if(typeof CookMateUI!=='undefined')CookMateUI.showToast('Nhập tên món ăn trước khi tìm bằng AI.','warning');return;}
+      button.disabled=true;button.textContent='Đang tìm nguồn thật…';
+      panel.style.display='block';panel.innerHTML='<p class="text-secondary">Đang tìm công thức và kiểm tra nguồn tham khảo…</p>';
+      CookMateStorage._apiRequest('POST','/api/recipes/ai-search',{query:query}).then(function(data){
+        var message='';
+        if(data.success&&data.recipes&&data.recipes.length){
+          message='<div class="flex-between mb-3"><strong>Gợi ý có nguồn tham khảo</strong><span class="badge badge-success">Tìm kiếm web</span></div>'+data.recipes.map(function(recipe){
+            var ingredients=(recipe.ingredients||[]).map(function(item){return '<li>'+escapeHtml([item.amount,item.unit,item.name].filter(Boolean).join(' '))+'</li>';}).join('');
+            var steps=(recipe.steps||[]).map(function(step){return '<li>'+escapeHtml(step)+'</li>';}).join('');
+            var sources=(recipe.sources||[]).map(function(source){return '<a href="'+escapeHtml(source.url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(source.name||source.url)+'</a>';}).join(' · ');
+            return '<article class="border border-light rounded p-3 mb-3"><h3 class="font-bold mb-1">'+escapeHtml(recipe.title)+'</h3><p class="text-sm text-secondary">'+escapeHtml(recipe.description||'')+'</p><p class="text-xs text-secondary">'+escapeHtml(recipe.servings||4)+' khẩu phần · '+escapeHtml(recipe.cook_time||0)+' phút · khoảng '+escapeHtml(recipe.calories||0)+' kcal/khẩu phần</p><details><summary>Nguyên liệu và cách làm</summary><ul class="list-disc ml-5 my-2">'+ingredients+'</ul><ol class="list-decimal ml-5">'+steps+'</ol></details><p class="text-xs mt-2"><strong>Nguồn:</strong> '+(sources||'Không có nguồn xác minh')+'</p><a class="btn btn-ghost btn-sm mt-2" href="../pages/recipe-detail.html?id='+encodeURIComponent(recipe.id)+'">Mở công thức đã lưu</a></article>';
+          }).join('');
+        }else{
+          message='<div class="alert alert-warning"><strong>Tìm kiếm trực tuyến chưa sẵn sàng.</strong> '+escapeHtml(data.message||'Không tìm thấy kết quả có nguồn xác minh.')+'</div>';
+          if(data.internalRecipes&&data.internalRecipes.length)message+='<p class="text-sm mt-3">Công thức CookMate gần nhất: '+data.internalRecipes.map(function(r){return '<a href="../pages/recipe-detail.html?id='+encodeURIComponent(r.id)+'">'+escapeHtml(r.title)+'</a>';}).join(' · ')+'</p>';
+        }
+        panel.innerHTML=message;
+      }).catch(function(error){panel.innerHTML='<div class="alert alert-warning">'+escapeHtml(error.message||'Không thể kết nối với Backend.')+'</div>';})
+        .finally(function(){button.disabled=false;button.textContent='Tìm thêm bằng AI';});
     }
 
     function resetAllFilters() {
@@ -370,18 +418,13 @@
       CookMateUI.showToast('Đã đặt lại toàn bộ bộ lọc', 'info');
     }
 
-    // Các hàm test luồng rẽ nhánh
-    function testEmptySearch() {
+    function quickSearchKeyword(term) {
       var input = document.getElementById('searchInput');
-      if (input) input.value = '';
-      handleSearchSubmit();
-    }
-
-    function testNoResultSearch() {
-      var input = document.getElementById('searchInput');
-      if (input) input.value = 'Món ăn vũ trụ sao hỏa 12345';
+      if (!input) return;
+      input.value = term || '';
+      currentKeyword = input.value.trim();
       updateClearButton();
-      handleSearchSubmit();
+      applyFilters();
     }
   </script>
 </body>

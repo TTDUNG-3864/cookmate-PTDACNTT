@@ -471,15 +471,23 @@
             return (b.rating || 0) - (a.rating || 0);
           });
         } else {
-          // Tab 'all' - default sort by recent creation date / ID
-          results.sort(function(a, b) {
-            var timeA = new Date(a.createdAt || 0).getTime() || 0;
-            var timeB = new Date(b.createdAt || 0).getTime() || 0;
-            if (timeA !== timeB) return timeB - timeA;
-            var idA = parseInt(a.id, 10) || 0;
-            var idB = parseInt(b.id, 10) || 0;
-            return idB - idA;
-          });
+          // Tab 'all' - sort by search relevance when keyword is present, else recent creation date / ID
+          if (state.keyword && typeof scoreRecipeSearch === 'function') {
+            results.sort(function(a, b) {
+              var diff = scoreRecipeSearch(b, state.keyword) - scoreRecipeSearch(a, state.keyword);
+              if (diff !== 0) return diff;
+              return (b.rating || 0) - (a.rating || 0);
+            });
+          } else {
+            results.sort(function(a, b) {
+              var timeA = new Date(a.createdAt || 0).getTime() || 0;
+              var timeB = new Date(b.createdAt || 0).getTime() || 0;
+              if (timeA !== timeB) return timeB - timeA;
+              var idA = parseInt(a.id, 10) || 0;
+              var idB = parseInt(b.id, 10) || 0;
+              return idB - idA;
+            });
+          }
         }
 
         // Update count

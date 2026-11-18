@@ -371,14 +371,10 @@
 
     // Direct approve
     window.approveRecipeDirect = function(id) {
-      var currentUser = CookMateStorage.getCurrentUser();
-      var res = CookMateStorage.approveRecipe(id, currentUser);
-      if (res) {
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Đã duyệt và xuất bản công thức "' + res.title + '" thành công!', 'success');
-        }
+      CookMateStorage.approveRecipe(id).then(function(res){
+        if(typeof CookMateUI!=='undefined')CookMateUI.showToast('Đã duyệt và xuất bản công thức "'+res.title+'" thành công!','success');
         renderPendingList();
-      }
+      }).catch(function(error){if(typeof CookMateUI!=='undefined')CookMateUI.showToast(error.message||'Không thể duyệt công thức.','error');});
     };
 
     // Open detail preview modal
@@ -404,11 +400,21 @@
       }).join('');
 
       var stepsHtml = (recipe.steps || []).map(function(s, idx) {
-        var desc = typeof s === 'string' ? s : s.description;
+        var desc = typeof s === 'string' ? s : (s.description || s.instruction || '');
+        var sTitle = typeof s === 'object' && s.title ? String(s.title).trim() : '';
+        var sMins = typeof s === 'object' ? Number(s.time || s.duration || 0) : 0;
+        var sTip = typeof s === 'object' ? String(s.tip || s.tip_note || '').trim() : '';
         return `
-          <div class="mb-3 flex gap-3 text-sm">
-            <span class="badge badge-primary" style="height: 24px; min-width: 24px; padding:0; display:flex; align-items:center; justify-content:center; border-radius:50%;">${idx + 1}</span>
-            <p class="flex-1">${escapeHtml(desc)}</p>
+          <div class="mb-3 flex gap-3 text-sm" style="align-items:flex-start;">
+            <span class="badge badge-primary" style="height: 26px; min-width: 26px; padding:0; display:flex; align-items:center; justify-content:center; border-radius:50%; margin-top:2px;">${idx + 1}</span>
+            <div class="flex-1">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px;">
+                <strong>${escapeHtml(sTitle || ('Công đoạn ' + (idx + 1)))}</strong>
+                ${sMins > 0 ? `<span class="badge badge-warning text-xs">⏱️ ${sMins} phút</span>` : ''}
+              </div>
+              <p style="line-height:1.65; margin:0;">${escapeHtml(desc)}</p>
+              ${sTip ? `<div style="margin-top:6px; padding:8px 10px; border-radius:8px; background:#FFFBEB; border:1px solid #FDE68A; color:#92400E; font-size:12px;"><strong>💡 Bí quyết Đầu bếp:</strong> ${escapeHtml(sTip)}</div>` : ''}
+            </div>
           </div>
         `;
       }).join('');
@@ -492,16 +498,10 @@
         return;
       }
 
-      var currentUser = CookMateStorage.getCurrentUser();
-      var res = CookMateStorage.rejectRecipe(currentRecipeActionId, reason, currentUser);
-
-      if (res) {
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Đã từ chối công thức "' + res.title + '" và lưu lý do gửi cho tác giả.', 'warning');
-        }
-        closeRejectModal();
-        renderPendingList();
-      }
+      CookMateStorage.rejectRecipe(currentRecipeActionId, reason).then(function(res){
+        if(typeof CookMateUI!=='undefined')CookMateUI.showToast('Đã từ chối công thức "'+res.title+'".','warning');
+        closeRejectModal();renderPendingList();
+      }).catch(function(error){if(typeof CookMateUI!=='undefined')CookMateUI.showToast(error.message||'Không thể từ chối công thức.','error');});
     });
 
   </script>

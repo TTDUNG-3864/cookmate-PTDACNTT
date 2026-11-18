@@ -105,7 +105,7 @@ var CookMateAuthUI = (function () {
     function evaluate(pw) {
       if (!pw || pw.length === 0) return 0;
       var score = 0;
-      if (pw.length >= 6) score++;
+      if (pw.length >= 8) score++;
       if (pw.length >= 10) score++;
       if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
       if (/[0-9]/.test(pw) || /[^A-Za-z0-9]/.test(pw)) score++;
@@ -126,49 +126,13 @@ var CookMateAuthUI = (function () {
 
       if (strengthText) {
         if (!val) {
-          strengthText.textContent = 'Tối thiểu 6 ký tự';
+          strengthText.textContent = 'Tối thiểu 8 ký tự';
           strengthText.style.color = '#78716C';
         } else {
           strengthText.textContent = labels[score] || 'Quá ngắn';
           strengthText.style.color = colors[score] || '#78716C';
         }
       }
-    });
-  }
-
-  /**
-   * Điền nhanh tài khoản mẫu (1-Click Demo Account Quick Fill)
-   */
-  function setupDemoAccounts() {
-    var demoCards = document.querySelectorAll('.auth-demo-card');
-    demoCards.forEach(function (card) {
-      card.addEventListener('click', function () {
-        var email = card.getAttribute('data-email');
-        var pass = card.getAttribute('data-password');
-
-        var emailInput = document.getElementById('loginEmail');
-        var passInput = document.getElementById('loginPassword');
-        if (emailInput) {
-          emailInput.value = email;
-          emailInput.classList.remove('input-error');
-        }
-        if (passInput) {
-          passInput.value = pass;
-          passInput.classList.remove('input-error');
-        }
-
-        var errEmail = document.getElementById('loginEmailError');
-        var errPass = document.getElementById('loginPasswordError');
-        if (errEmail) errEmail.classList.remove('is-visible');
-        if (errPass) errPass.classList.remove('is-visible');
-
-        // Kích hoạt nhấc đũa phở chào mừng
-        triggerPho(true);
-
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Đã nạp tài khoản mẫu: ' + email, 'info');
-        }
-      });
     });
   }
 
@@ -233,113 +197,31 @@ var CookMateAuthUI = (function () {
         submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang xác thực...</span>';
       }
 
-      setTimeout(function () {
-        // Kiểm tra thông tin đăng nhập trong demo credentials + localStorage
-        var demoCreds = typeof DEMO_CREDENTIALS !== 'undefined' ? DEMO_CREDENTIALS : [];
-        var savedCreds = typeof CookMateStorage !== 'undefined' ? CookMateStorage.get('cookmate_demo_creds') || [] : [];
-        var allCreds = demoCreds.concat(savedCreds);
-
-        var match = allCreds.find(function (c) {
-          return c.email.toLowerCase() === email.toLowerCase() && c.passwordHint === password;
-        });
-
-        if (match && typeof CookMateStorage !== 'undefined') {
-          var allUsers = CookMateStorage.getAllUsers();
-          var user = allUsers.find(function (u) {
-            return u.id === match.userId || u.email.toLowerCase() === email.toLowerCase();
-          });
-
-          if (user) {
-            if (user.status === 'inactive') {
-              if (submitBtn) {
-                submitBtn.classList.remove('is-loading');
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>Đăng nhập</span>';
-              }
-              if (emailInput) emailInput.classList.add('input-error');
-              if (emailErr) {
-                emailErr.textContent = 'Tài khoản của bạn đã bị tạm khóa bởi Quản trị viên.';
-                emailErr.classList.add('is-visible');
-              }
-              if (typeof CookMateUI !== 'undefined') {
-                CookMateUI.showToast('Tài khoản của bạn đã bị tạm khóa bởi Quản trị viên.', 'error');
-              }
-              return;
-            }
-
-            CookMateStorage.setCurrentUser(user);
-            if (typeof CookMateStorage._apiRequest === 'function') {
-              CookMateStorage._apiRequest('POST', '/api/auth/login', { email: email, password: password });
-            }
-            if (typeof CookMateUI !== 'undefined') {
-              CookMateUI.showToast('Đăng nhập thành công! Chào mừng ' + user.name, 'success');
-            }
-            if (typeof Navigation !== 'undefined') {
-              Navigation.updateAuthArea();
-              if (typeof updateFavoriteBadge === 'function') updateFavoriteBadge();
-            }
-
-            if (submitBtn) {
-              submitBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>Thành công!</span>';
-            }
-
-            // Hiệu ứng phở bay bổng khi đăng nhập thành công
-            triggerPho(true);
-
-            setTimeout(function () {
-              // Điều hướng tự động theo vai trò tài khoản
-              var urlParams = new URLSearchParams(window.location.search);
-              var redirectUrl = urlParams.get('redirect');
-
-              if (user.role === 'admin') {
-                if (redirectUrl && (redirectUrl.includes('admin/') || redirectUrl.startsWith('pages/admin/'))) {
-                  if (redirectUrl.startsWith('pages/')) {
-                    window.location.href = '../../' + redirectUrl;
-                  } else {
-                    window.location.href = redirectUrl;
-                  }
-                  return;
-                }
-                window.location.href = '../../pages/admin/index.html';
-                return;
-              }
-
-              // Đối với thành viên (member): kiểm tra redirect URL hợp lệ
-              if (redirectUrl) {
-                // TUYỆT ĐỐI KHÔNG redirect Member vào khu vực Admin (ngăn ngừa lặp vô hạn)
-                if (!redirectUrl.includes('admin/') && !redirectUrl.includes('pages/admin/')) {
-                  if (redirectUrl.startsWith('pages/')) {
-                    window.location.href = '../../' + redirectUrl;
-                  } else if (redirectUrl.startsWith('./') || redirectUrl.startsWith('../')) {
-                    window.location.href = redirectUrl;
-                  }
-                  return;
-                }
-              }
-              // Mặc định Thành viên về trang chủ
-              window.location.href = '../../index.html';
-            }, 300);
+      CookMateStorage.login(email, password).then(function (data) {
+        var user = data.user;
+        if (typeof CookMateUI !== 'undefined') CookMateUI.showToast('Đăng nhập thành công! Chào mừng ' + user.name, 'success');
+        if (typeof Navigation !== 'undefined') Navigation.updateAuthArea();
+        if (typeof updateFavoriteBadge === 'function') updateFavoriteBadge();
+        if (submitBtn) submitBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>Thành công!</span>';
+        triggerPho(true);
+        setTimeout(function () {
+          var redirectUrl = new URLSearchParams(window.location.search).get('redirect');
+          if (user.role === 'admin') {
+            if (redirectUrl && redirectUrl.indexOf('admin/') !== -1 && !/^https?:/i.test(redirectUrl)) {
+              window.location.href = redirectUrl.indexOf('pages/') === 0 ? '../../' + redirectUrl : redirectUrl;
+            } else window.location.href = '../../pages/admin/index.html';
             return;
           }
-        }
-
-        // Thất bại
-        if (submitBtn) {
-          submitBtn.classList.remove('is-loading');
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>Đăng nhập</span>';
-        }
-
+          if (redirectUrl && redirectUrl.indexOf('admin/') === -1 && !/^https?:/i.test(redirectUrl)) {
+            window.location.href = redirectUrl.indexOf('pages/') === 0 ? '../../' + redirectUrl : redirectUrl;
+          } else window.location.href = '../../index.html';
+        }, 300);
+      }).catch(function (error) {
+        if (submitBtn) { submitBtn.classList.remove('is-loading'); submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>Đăng nhập</span>'; }
         if (passInput) passInput.classList.add('input-error');
-        if (passErr) {
-          passErr.textContent = 'Email hoặc mật khẩu không chính xác';
-          passErr.classList.add('is-visible');
-        }
-
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Email hoặc mật khẩu không đúng', 'error');
-        }
-      }, 100);
+        if (passErr) { passErr.textContent = error.message || 'Không thể đăng nhập. Vui lòng thử lại.'; passErr.classList.add('is-visible'); }
+        if (typeof CookMateUI !== 'undefined') CookMateUI.showToast(error.message || 'Không thể kết nối Backend.', 'error');
+      });
     });
   }
 
@@ -414,10 +296,10 @@ var CookMateAuthUI = (function () {
           passErr.classList.add('is-visible');
         }
         hasError = true;
-      } else if (password.length < 6) {
+      } else if (password.length < 8) {
         if (passInput) passInput.classList.add('input-error');
         if (passErr) {
-          passErr.textContent = 'Mật khẩu phải có ít nhất 6 ký tự';
+          passErr.textContent = 'Mật khẩu phải có ít nhất 8 ký tự';
           passErr.classList.add('is-visible');
         }
         hasError = true;
@@ -450,22 +332,6 @@ var CookMateAuthUI = (function () {
 
       if (hasError) return;
 
-      // Kiểm tra trùng email
-      if (typeof CookMateStorage !== 'undefined') {
-        var allUsers = CookMateStorage.getAllUsers();
-        var exists = allUsers.some(function (u) {
-          return u.email.toLowerCase() === email.toLowerCase();
-        });
-        if (exists) {
-          if (emailInput) emailInput.classList.add('input-error');
-          if (emailErr) {
-            emailErr.textContent = 'Email này đã được sử dụng';
-            emailErr.classList.add('is-visible');
-          }
-          return;
-        }
-      }
-
       // Loading
       if (submitBtn) {
         submitBtn.classList.add('is-loading');
@@ -473,39 +339,16 @@ var CookMateAuthUI = (function () {
         submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang khởi tạo tài khoản...</span>';
       }
 
-      setTimeout(function () {
-        if (typeof CookMateStorage !== 'undefined') {
-          var res = CookMateStorage.registerUser({
-            name: name,
-            email: email,
-            password: password
-          });
-
-          if (res && !res.error) {
-            if (typeof CookMateUI !== 'undefined') {
-              CookMateUI.showToast('Đăng ký tài khoản thành công! Đang chuyển hướng sang Đăng nhập...', 'success');
-            }
-
-            // Hiệu ứng phở khi đăng ký thành công
-            triggerPho(true);
-
-            setTimeout(function () {
-              window.location.href = 'login.html';
-            }, 1000);
-            return;
-          } else {
-            if (typeof CookMateUI !== 'undefined') {
-              CookMateUI.showToast(res.error || 'Có lỗi khi đăng ký', 'error');
-            }
-          }
-        }
-
-        if (submitBtn) {
-          submitBtn.classList.remove('is-loading');
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> <span>Đăng ký tài khoản</span>';
-        }
-      }, 500);
+      CookMateStorage.registerUser({ name:name, email:email, password:password }).then(function () {
+        if (typeof CookMateUI !== 'undefined') CookMateUI.showToast('Đăng ký thành công!', 'success');
+        triggerPho(true);
+        setTimeout(function () { window.location.href = '../../index.html'; }, 700);
+      }).catch(function (error) {
+        if (submitBtn) { submitBtn.classList.remove('is-loading'); submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> <span>Đăng ký tài khoản</span>'; }
+        var message=error.message||'Có lỗi khi đăng ký.';
+        if (emailErr && /email|sử dụng/i.test(message)) { emailErr.textContent=message; emailErr.classList.add('is-visible'); }
+        if (typeof CookMateUI !== 'undefined') CookMateUI.showToast(message, 'error');
+      });
     });
   }
 
@@ -574,7 +417,6 @@ var CookMateAuthUI = (function () {
     // 4. Cài đặt các tính năng con
     setupPasswordToggles();
     setupPasswordStrength();
-    setupDemoAccounts();
     setupLoginForm();
     setupRegisterForm();
     setupSocialAuth();

@@ -91,31 +91,48 @@
         return r.id == rawId || r.id === numId || String(r.id) === String(rawId);
       });
 
-      if (!currentRecipe) {
+      var finishDetailBoot = function (recipeObj) {
+        currentRecipe = recipeObj;
+        if (!currentRecipe) {
+          showNotFound();
+          return;
+        }
+        var isApproved = currentRecipe.status === 'approved' || !currentRecipe.status;
+        var currentUser = CookMateStorage.getCurrentUser();
+        var isAuthor = currentUser && (currentUser.id === currentRecipe.authorId);
+        var isAdmin = currentUser && (currentUser.role === 'admin');
+        if (!isApproved && !isAuthor && !isAdmin) {
+          showNotFound();
+          return;
+        }
+        document.title = currentRecipe.title + ' | CookMate';
+        baseServings = currentRecipe.servings || 4;
+        currentServings = baseServings;
+        renderRecipeDetail();
+        renderRelatedRecipes();
+        updateFavoriteButtonState();
+      };
+
+      if (currentRecipe) {
+        finishDetailBoot(currentRecipe);
+        var isApprovedNow = currentRecipe.status === 'approved' || !currentRecipe.status;
+        if (CookMateStorage.fetchRecipeDetail) {
+          CookMateStorage.fetchRecipeDetail(rawId, isApprovedNow, !isApprovedNow).then(function(fresh) {
+            if (fresh && fresh.id) finishDetailBoot(fresh);
+          }).catch(function(){});
+        }
+      } else if (CookMateStorage.fetchRecipeDetail) {
+        CookMateStorage.fetchRecipeDetail(rawId, true, false).then(finishDetailBoot).catch(function() {
+          var cu = CookMateStorage.getCurrentUser();
+          if (cu && cu.role === 'admin') {
+            CookMateStorage.fetchRecipeDetail(rawId, false, true).then(finishDetailBoot).catch(showNotFound);
+          } else {
+            showNotFound();
+          }
+        });
+      } else {
         showNotFound();
-        return;
       }
-
-      var isApproved = currentRecipe.status === 'approved' || !currentRecipe.status;
-      var currentUser = CookMateStorage.getCurrentUser();
-      var isAuthor = currentUser && (currentUser.id === currentRecipe.authorId);
-      var isAdmin = currentUser && (currentUser.role === 'admin');
-
-      // Unapproved recipes are only accessible by Author or Admin
-      if (!isApproved && !isAuthor && !isAdmin) {
-        showNotFound();
-        return;
-      }
-
-      // Update page title
-      document.title = currentRecipe.title + ' | CookMate';
-
-      baseServings = currentRecipe.servings || 4;
-      currentServings = baseServings;
-
-      renderRecipeDetail();
-      renderRelatedRecipes();
-      updateFavoriteButtonState();
     });
 
     function showNotFound() {
@@ -132,7 +149,8 @@
       var container = document.getElementById('recipeDetailContainer');
       var r = currentRecipe;
 
-      var category = CATEGORIES.find(function(c) { return c.id === r.categoryId; });
+      var category = (CookMateStorage.getCategoryById && CookMateStorage.getCategoryById(r.categoryId))
+        || (typeof CATEGORIES !== 'undefined' ? CATEGORIES.find(function(c) { return c.id === r.categoryId; }) : null);
       var author = CookMateStorage.getAllUsers().find(function(u) { return u.id === r.authorId; });
       var totalTime = (r.prepTime || 0) + (r.cookTime || 0);
 
@@ -149,7 +167,7 @@
         <article class="detail-hero-card">
           <!-- Cột trái: Ảnh đại diện lớn sắc nét bo góc mềm mại -->
           <div class="detail-hero-media">
-            <img src="${r.image}" alt="${escapeHtml(r.title)}" onerror="handleImageError(this)">
+            <img src="${escapeHtml(getImageUrl(r.image, getCategoryFallbackImage(r.categoryId)))}" alt="${escapeHtml(r.title)}" onerror="handleImageError(this, '${escapeHtml(String(r.categoryId || ''))}')">
             <div class="detail-hero-badges">
               ${r.isFeatured ? '<span class="badge badge-primary"><i class="fa-solid fa-fire"></i> Nổi bật</span>' : ''}
               ${r.isNew ? '<span class="badge badge-success"><i class="fa-solid fa-clock"></i> Mới</span>' : ''}
@@ -340,12 +358,24 @@
 
           <div class="steps-timeline">
             ${(r.steps || []).map(function(s, idx) {
+              var stepNum = s.step || (idx + 1);
+              var rawTitle = typeof s === 'object' && s.title ? String(s.title).trim() : '';
+              var displayTitle = (rawTitle && !/^bước\s*\d+\s*[:.-]?$/i.test(rawTitle))
+                ? rawTitle
+                : ('Công đoạn ' + stepNum);
+              var stepDesc = typeof s === 'string' ? s : (s.description || s.instruction || '');
+              var stepMins = typeof s === 'object' ? Number(s.time || s.duration || s.duration_mins || 0) : 0;
+              var stepTip = typeof s === 'object' ? String(s.tip || s.tip_note || '').trim() : '';
               return `
                 <div class="step-timeline-item">
-                  <div class="step-badge">${s.step || (idx + 1)}</div>
+                  <div class="step-badge">${stepNum}</div>
                   <div class="step-content">
-                    <h4 class="step-title">Bước ${s.step || (idx + 1)}</h4>
-                    <p class="step-text">${escapeHtml(s.description)}</p>
+                    <div class="step-header-row">
+                      <h4 class="step-title">${escapeHtml(displayTitle)}</h4>
+                      ${stepMins > 0 ? `<span class="step-duration-badge">⏱️ ${stepMins} phút</span>` : ''}
+                    </div>
+                    <p class="step-text">${escapeHtml(stepDesc)}</p>
+                    ${stepTip ? `<div class="step-tip-box"><strong>💡 Bí quyết Đầu bếp:</strong> <span>${escapeHtml(stepTip)}</span></div>` : ''}
                   </div>
                 </div>
               `;
@@ -449,15 +479,10 @@
         CookMateUI.showToast('Vui lòng đăng nhập để lưu công thức yêu thích', 'warning');
         return;
       }
-      var added = CookMateStorage.toggleFavorite(currentRecipe.id);
-      updateFavoriteButtonState();
-      updateFavoriteBadge();
-
-      if (added) {
-        CookMateUI.showToast('Đã thêm "' + currentRecipe.title + '" vào danh sách yêu thích', 'success');
-      } else {
-        CookMateUI.showToast('Đã xóa khỏi danh sách yêu thích', 'info');
-      }
+      CookMateStorage.toggleFavorite(currentRecipe.id).then(function(result){
+        updateFavoriteButtonState();updateFavoriteBadge();
+        CookMateUI.showToast(result.added?'Đã thêm "'+currentRecipe.title+'" vào danh sách yêu thích':'Đã xóa khỏi danh sách yêu thích',result.added?'success':'info');
+      }).catch(function(error){CookMateUI.showToast(error.message||'Không thể cập nhật yêu thích.','error');});
     }
 
     function updateFavoriteButtonState() {
@@ -599,21 +624,17 @@
         return;
       }
 
-      var newComment = CookMateStorage.addComment(currentRecipe.id, content);
-      if (newComment) {
+      CookMateStorage.addComment(currentRecipe.id, content).then(function () {
         input.value = '';
         CookMateUI.showToast('Gửi bình luận thành công!', 'success');
         renderComments();
-      } else {
-        CookMateUI.showToast('Có lỗi xảy ra khi gửi bình luận', 'error');
-      }
+      }).catch(function(error){CookMateUI.showToast(error.message||'Có lỗi xảy ra khi gửi bình luận.','error');});
     }
 
     function deleteUserComment(id) {
       CookMateUI.showConfirm('Bạn có chắc muốn xóa bình luận này?', function() {
-        CookMateStorage.deleteComment(id);
-        CookMateUI.showToast('Đã xóa bình luận', 'info');
-        renderComments();
+        CookMateStorage.deleteComment(id).then(function(){CookMateUI.showToast('Đã xóa bình luận','info');renderComments();})
+          .catch(function(error){CookMateUI.showToast(error.message||'Không thể xóa bình luận.','error');});
       });
     }
 

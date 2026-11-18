@@ -507,8 +507,6 @@ function handleLogout() {
     // TUYỆT ĐỐI không làm mất phiên Admin Shell bên ngoài
     if (typeof CookMateStorage !== 'undefined') {
       CookMateStorage.remove(CookMateStorage.KEYS.USER);
-    } else {
-      localStorage.removeItem('cookmate_current_user');
     }
     if (typeof CookMateUI !== 'undefined') {
       CookMateUI.showToast('Đã đăng xuất khỏi phiên xem website', 'info');
@@ -520,15 +518,7 @@ function handleLogout() {
   }
 
   // Đăng xuất từ cửa sổ chính: xóa toàn bộ session
-  if (typeof CookMateStorage !== 'undefined') {
-    CookMateStorage.clearCurrentUser();
-    if (CookMateStorage.clearAdminSession) {
-      CookMateStorage.clearAdminSession();
-    }
-  } else {
-    localStorage.removeItem('cookmate_current_user');
-    localStorage.removeItem('cookmate_admin_session');
-  }
+  var logoutPromise=typeof CookMateStorage!=='undefined'?CookMateStorage.logout():Promise.resolve();
 
   try {
     sessionStorage.removeItem('cookmate_sidebar_closed');
@@ -538,7 +528,7 @@ function handleLogout() {
   if (typeof CookMateUI !== 'undefined') {
     CookMateUI.showToast('Đã đăng xuất thành công', 'success');
   }
-  setTimeout(function () {
+  Promise.resolve(logoutPromise).catch(function(){}).finally(function(){
     window.location.href = getBasePath() + 'index.html';
-  }, 400);
+  });
 }

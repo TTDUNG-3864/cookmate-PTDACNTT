@@ -182,8 +182,6 @@
   <script src="../../assets/js/admin-shell.js"></script>
 
   <script>
-    var deletedCommentIds = JSON.parse(localStorage.getItem('cookmate_deleted_comments') || '[]');
-
     document.addEventListener('DOMContentLoaded', function() {
       if (!checkAdminAuth()) return;
       setupSidebar();
@@ -231,11 +229,6 @@
 
       var comments = CookMateStorage.getAllComments();
       var recipes = CookMateStorage.getAllRecipes();
-
-      // Lọc các bình luận bị xóa trong demo
-      comments = comments.filter(function(c) {
-        return !deletedCommentIds.includes(c.id);
-      });
 
       if (keyword) {
         comments = comments.filter(function(c) {
@@ -291,12 +284,9 @@
 
     function deleteAdminComment(id) {
       CookMateUI.showConfirm('Bạn có chắc muốn xóa bình luận này?', function() {
-        CookMateStorage.deleteComment(id);
-        deletedCommentIds.push(id);
-        localStorage.setItem('cookmate_deleted_comments', JSON.stringify(deletedCommentIds));
-
-        CookMateUI.showToast('Đã xóa bình luận thành công', 'success');
-        renderCommentsTable();
+        CookMateStorage.deleteComment(id).then(function(){
+          CookMateUI.showToast('Đã xóa bình luận thành công','success');renderCommentsTable();
+        }).catch(function(error){CookMateUI.showToast(error.message||'Không thể xóa bình luận.','error');});
       });
     }
   </script>

@@ -180,6 +180,7 @@
                 </tbody>
               </table>
             </div>
+            <div id="adminRecipesPagination" class="p-4"></div>
           </div>
         </div>
 
@@ -202,8 +203,6 @@
   <script src="../../assets/js/admin-shell.js"></script>
 
   <script>
-    var deletedRecipeIds = JSON.parse(localStorage.getItem('cookmate_deleted_recipes') || '[]');
-
     document.addEventListener('DOMContentLoaded', function() {
       if (!checkAdminAuth()) return;
 
@@ -274,9 +273,7 @@
       // IMPORTANT: Use getAllRecipesRaw or includeAll = true to see all recipes
       var all = CookMateStorage.getAllRecipesRaw ? CookMateStorage.getAllRecipesRaw() : CookMateStorage.getAllRecipes(true);
       
-      var recipes = all.filter(function(r) {
-        return !deletedRecipeIds.includes(r.id);
-      });
+      var recipes = all.slice();
 
       if (keyword) {
         recipes = recipes.filter(function(r) {
@@ -297,16 +294,28 @@
         });
       }
 
+      var pagEl = document.getElementById('adminRecipesPagination');
       if (countEl) countEl.textContent = recipes.length;
 
       if (recipes.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-secondary">Không tìm thấy công thức nào phù hợp.</td></tr>';
+        if (pagEl) pagEl.innerHTML = '';
         return;
       }
 
       var categories = CookMateStorage.getAllCategories();
+      var filterKey = keyword + '|' + catVal + '|' + statusVal;
+      if (window._adminRecFilterKey !== filterKey) {
+        window._adminRecFilterKey = filterKey;
+        window._adminRecPage = 1;
+      }
+      var perPage = 20;
+      var totalPages = Math.ceil(recipes.length / perPage);
+      var curPage = Math.max(1, Math.min(totalPages, window._adminRecPage || 1));
+      var offset = (curPage - 1) * perPage;
+      var pagedRecipes = recipes.slice(offset, offset + perPage);
 
-      tbody.innerHTML = recipes.map(function(r, index) {
+      tbody.innerHTML = pagedRecipes.map(function(r, index) {
         var cat = categories.find(function(c) { return c.id === r.categoryId || c.id == r.categoryId; });
         var status = r.status || 'approved';
 
@@ -319,11 +328,13 @@
           statusBadge = '<span class="badge badge-danger text-xs" title="' + escapeHtml(r.rejectionReason || '') + '"><i class="fa-solid fa-xmark mr-1"></i> Bị từ chối</span>';
         }
 
+        var rowImg = typeof getImageUrl === 'function' ? getImageUrl(r.image || r.imageUrl, typeof getCategoryFallbackImage === 'function' ? getCategoryFallbackImage(r.categoryId) : '../../assets/images/categories/mon-chinh.svg') : (r.image || r.imageUrl || '../../assets/images/categories/mon-chinh.svg');
+
         return `
           <tr id="admin-recipe-row-${r.id}">
-            <td>${index + 1}</td>
+            <td>${offset + index + 1}</td>
             <td>
-              <img src="${r.image || r.imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg'}" alt="" style="width: 44px; height: 44px; border-radius: 8px; object-fit: cover;" onerror="handleImageError(this)">
+              <img src="${escapeHtml(rowImg)}" alt="" style="width: 44px; height: 44px; border-radius: 8px; object-fit: cover;" onerror="handleImageError(this, '${escapeHtml(String(r.categoryId || ''))}')">
             </td>
             <td>
               <strong>${escapeHtml(r.title || r.name)}</strong>
@@ -348,32 +359,20 @@
                 <a href="../recipe-detail.html?id=${r.id}" class="btn btn-ghost btn-sm" title="Xem trên web" target="_blank">
                   <i class="fa-solid fa-arrow-up-right-from-square text-primary"></i>
                 </a>
-                <a href="recipe-form.html?id=${r.id}" class="btn btn-ghost btn-sm" title="Chỉnh sửa (Admin)">
-                  <i class="fa-solid fa-pen-to-square text-info"></i>
-                </a>
-                <button type="button" class="btn btn-ghost btn-sm text-danger" title="Xóa món" onclick="deleteRecipe('${r.id}', '${escapeHtml(r.title || r.name).replace(/'/g, "\\'")}')">
-                  <i class="fa-solid fa-trash"></i>
-                </button>
               </div>
             </td>
           </tr>
         `;
       }).join('');
-    }
-
-    function deleteRecipe(id, title) {
-      if (confirm('Bạn có chắc chắn muốn xóa công thức "' + title + '"?')) {
-        CookMateStorage.deleteUserRecipe(id);
-        deletedRecipeIds.push(id);
-        localStorage.setItem('cookmate_deleted_recipes', JSON.stringify(deletedRecipeIds));
-
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Đã xóa công thức thành công', 'success');
-        }
-        renderRecipeTable();
-        updatePendingBadge();
+      if (pagEl && typeof CookMateUI !== 'undefined') {
+        window.goToAdminRecipePage = function(p) {
+          window._adminRecPage = p;
+          renderRecipeTable();
+        };
+        pagEl.innerHTML = CookMateUI.createPagination(curPage, totalPages, 'goToAdminRecipePage');
       }
     }
+
   </script>
 </body>
 </html>

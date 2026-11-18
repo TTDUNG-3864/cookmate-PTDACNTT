@@ -218,22 +218,14 @@
         return;
       }
 
-      user.name = name;
-      user.bio = bio;
-
-      CookMateStorage.setCurrentUser(user);
-
-      /* Also update in users list if possible */
-      if (CookMateStorage.updateUser) {
-        CookMateStorage.updateUser(user);
-      }
-
-      renderProfile(user);
-      hideEditForm();
-
-      if (typeof CookMateUI !== 'undefined') {
-        CookMateUI.showToast('Cập nhật hồ sơ thành công!', 'success');
-      }
+      var updated=Object.assign({},user,{name:name,bio:bio});
+      CookMateStorage.updateUser(updated).then(function(savedUser){
+        renderProfile(savedUser);
+        hideEditForm();
+        if(typeof CookMateUI!=='undefined')CookMateUI.showToast('Cập nhật hồ sơ thành công!','success');
+      }).catch(function(error){
+        if(typeof CookMateUI!=='undefined')CookMateUI.showToast(error.message||'Không thể cập nhật hồ sơ.','error');
+      });
     }
   </script>
 </body>

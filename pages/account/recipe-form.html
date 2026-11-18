@@ -274,7 +274,7 @@
 
     function populateCategories() {
       var select = document.getElementById('recipeCategory');
-      var cats = typeof CATEGORIES !== 'undefined' ? CATEGORIES : [];
+      var cats = CookMateStorage.getAllCategories ? CookMateStorage.getAllCategories() : (typeof CATEGORIES !== 'undefined' ? CATEGORIES : []);
       cats.forEach(function(cat) {
         var option = document.createElement('option');
         option.value = cat.id || cat.slug || cat.name;
@@ -536,6 +536,10 @@
       var currentUser = CookMateStorage.getCurrentUser();
       var parsedCatId = parseInt(categoryId, 10) || 1;
 
+      var fallbackMemberImg = typeof getCategoryFallbackImage === 'function'
+        ? getCategoryFallbackImage(parsedCatId)
+        : '../../assets/images/categories/mon-chinh.svg';
+
       var recipeData = {
         title: name,
         name: name,
@@ -544,8 +548,8 @@
         categoryId: parsedCatId,
         category: parsedCatId,
         occasion: occasion || null,
-        image: imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg',
-        imageUrl: imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg',
+        image: imageUrl || fallbackMemberImg,
+        imageUrl: imageUrl || fallbackMemberImg,
         prepTime: prepTime,
         cookTime: cookTime,
         difficulty: difficulty,
@@ -560,56 +564,21 @@
       };
 
       if (isEditMode && editRecipeId) {
-        /* Update existing recipe */
-        recipeData.id = editRecipeId;
-        var existing = CookMateStorage.getRecipeById ? CookMateStorage.getRecipeById(editRecipeId, true) : null;
-        var wasRejected = existing && existing.status === 'rejected';
-        if (wasRejected) {
-          recipeData.resubmit = true;
-        }
-
-        CookMateStorage.updateRecipe(editRecipeId, recipeData, currentUser);
-
-        if (wasRejected) {
-          if (typeof CookMateUI !== 'undefined') {
-            CookMateUI.showToast('Công thức đã được gửi lại và đang chờ Admin duyệt!', 'success');
-          }
-          setTimeout(function() {
-            window.location.href = 'my-recipes.html?tab=pending';
-          }, 800);
-        } else {
-          if (typeof CookMateUI !== 'undefined') {
-            CookMateUI.showToast('Cập nhật công thức thành công!', 'success');
-          }
-          setTimeout(function() {
-            window.location.href = 'my-recipes.html';
-          }, 800);
-        }
+        CookMateStorage.updateRecipe(editRecipeId,recipeData,currentUser).then(function(){
+          if(typeof CookMateUI!=='undefined')CookMateUI.showToast('Công thức đã cập nhật và được gửi lại để Admin duyệt.','success');
+          setTimeout(function(){window.location.href='my-recipes.html?tab=pending';},800);
+        }).catch(function(error){
+          if(typeof CookMateUI!=='undefined')CookMateUI.showToast(error.message||'Không thể cập nhật công thức.','error');
+          if(submitBtn){submitBtn.disabled=false;submitBtn.innerHTML='<i class="fa-solid fa-paper-plane"></i> <span>Gửi công thức</span>';}
+        });
       } else {
-        /* Add new recipe */
-        recipeData.id = Date.now();
-        recipeData.createdAt = new Date().toISOString();
-        recipeData.ratings = [];
-        recipeData.comments = [];
-        recipeData.averageRating = 0;
-
-        CookMateStorage.addRecipe(recipeData, currentUser);
-
-        if (currentUser.role === 'admin') {
-          if (typeof CookMateUI !== 'undefined') {
-            CookMateUI.showToast('Công thức đã được xuất bản công khai ngay!', 'success');
-          }
-          setTimeout(function() {
-            window.location.href = 'my-recipes.html?tab=approved';
-          }, 800);
-        } else {
-          if (typeof CookMateUI !== 'undefined') {
-            CookMateUI.showToast('Công thức của bạn đã được gửi và đang chờ Admin duyệt!', 'success');
-          }
-          setTimeout(function() {
-            window.location.href = 'my-recipes.html?tab=pending';
-          }, 800);
-        }
+        CookMateStorage.addRecipe(recipeData).then(function(){
+          if(typeof CookMateUI!=='undefined')CookMateUI.showToast('Công thức đã được gửi và đang chờ Admin duyệt.','success');
+          setTimeout(function(){window.location.href='my-recipes.html?tab=pending';},800);
+        }).catch(function(error){
+          if(typeof CookMateUI!=='undefined')CookMateUI.showToast(error.message||'Không thể gửi công thức.','error');
+          if(submitBtn){submitBtn.disabled=false;submitBtn.innerHTML='<i class="fa-solid fa-paper-plane"></i> <span>Gửi công thức</span>';}
+        });
       }
     }
   </script>
