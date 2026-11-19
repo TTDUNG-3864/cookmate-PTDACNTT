@@ -1,136 +1,66 @@
-/**
- * CookMate Admin Access Guard (Chạy sớm trong <head> để bảo vệ toàn diện)
- * 1. Ngăn chặn triệt để FOUC (Flash of Unauthenticated Content): ẩn DOM ngay lập tức nếu chưa xác thực
- * 2. Phân loại chuẩn xác:
- *    - Khách chưa đăng nhập: Chuyển hướng sang login.html kèm redirect query
- *    - Thành viên (Member): Bị từ chối quyền Admin, chuyển hướng thẳng về index.html (KHÔNG lặp vô hạn)
- *    - Quản trị viên (Admin): Cho phép truy cập bình thường
- * 3. Chống khôi phục qua Back/Forward Cache (bfcache) của trình duyệt qua pageshow event
- * 4. Tách biệt phiên Admin Shell và Website xem trước bên phải
- */
-
+// Admin pages are hidden until the server confirms the session role.
 (function () {
   'use strict';
+  var base=String(window.COOKMATE_API_BASE_URL||'').replace(/\/$/,'');
+  var target=window.location.pathname.split('/').slice(-1)[0]||'index.html';
+  var adminUser=null;
+  var root=document.documentElement;
+  if(root)root.style.visibility='hidden';
 
-  function getValidAdminSession() {
-    try {
-      // 1. Kiểm tra session Admin riêng biệt
-      var adminSessRaw = localStorage.getItem('cookmate_admin_session');
-      if (adminSessRaw) {
-        var adminSess = JSON.parse(adminSessRaw);
-        if (adminSess && adminSess.role === 'admin') {
-          return adminSess;
-        }
-      }
-
-      // 2. Fallback kiểm tra current_user
-      var userRaw = localStorage.getItem('cookmate_current_user');
-      if (userRaw) {
-        var user = JSON.parse(userRaw);
-        if (user && user.role === 'admin') {
-          // Khởi tạo phiên admin
-          var newSess = {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: 'admin',
-            loginTime: Date.now()
-          };
-          localStorage.setItem('cookmate_admin_session', JSON.stringify(newSess));
-          return newSess;
-        }
-      }
-    } catch (e) {
-      console.warn('AdminGuard session parse error:', e);
+  function deny(user) {
+    if(user)window.location.replace('../../index.html');
+    else {
+      var path=window.location.pathname;var idx=path.indexOf('pages/admin/');
+      var relative=idx>=0?path.substring(idx):'pages/admin/'+target;
+      window.location.replace('../auth/login.html?redirect='+encodeURIComponent(relative));
     }
-    return null;
   }
 
-  function verifyAdminAccess() {
-    var adminUser = getValidAdminSession();
-
-    if (!adminUser) {
-      // 1. Ẩn toàn bộ giao diện ngay lập tức để không lộ 1 pixel nào của Admin
-      if (document.documentElement) {
-        document.documentElement.style.display = 'none';
+  window.__COOKMATE_ADMIN_AUTH_READY__=fetch(base+'/api/auth/me',{credentials:'include',headers:{'Accept':'application/json'}})
+    .then(function(response){if(!response.ok)throw new Error('Backend unavailable');return response.json();})
+    .then(function(data){
+      window.__COOKMATE_CSRF_TOKEN__=data&&data.csrfToken||'';
+      var usr=data&&data.authenticated&&data.user?data.user:null;
+      if(usr&&(usr.must_change_password||usr.mustChangePassword)){
+        if(root)root.style.visibility='';
+        return false;
       }
-
-      // 2. Kiểm tra xem người dùng hiện tại có phải là Member đang đăng nhập không
-      var isMember = false;
-      try {
-        var rawUser = localStorage.getItem('cookmate_current_user');
-        if (rawUser) {
-          var u = JSON.parse(rawUser);
-          if (u && u.role === 'member') {
-            isMember = true;
-          }
-        }
-      } catch (e) {}
-
-      // 3. Điều hướng an toàn:
-      if (isMember) {
-        // Thành viên thường: Bị từ chối truy cập Admin -> Chuyển về trang chủ User
-        window.location.replace('../../index.html');
-      } else {
-        // Khách chưa đăng nhập: Chuyển sang login kèm redirect URL
-        var currentPath = window.location.pathname;
-        var relIdx = currentPath.indexOf('pages/admin/');
-        var target = relIdx !== -1 ? currentPath.substring(relIdx) : 'pages/admin/index.html';
-        window.location.replace('../auth/login.html?redirect=' + encodeURIComponent(target));
-      }
+      adminUser=usr&&usr.role==='admin'?usr:null;
+      window.__COOKMATE_ADMIN_USER__=adminUser;
+      if(adminUser){if(root)root.style.visibility='';return true;}
+      deny(usr);return false;
+    })
+    .catch(function(){
+      if(root)root.style.visibility='';
+      window.addEventListener('DOMContentLoaded',function(){
+        if(document.body){var notice=document.createElement('div');notice.setAttribute('role','alert');notice.textContent='Không thể xác thực Admin với Backend. Hãy kiểm tra kết nối rồi tải lại trang.';notice.style.cssText='margin:24px;padding:16px;background:#fff3cd;color:#664d03;border-radius:10px;font:14px system-ui';document.body.prepend(notice);}
+      },{once:true});
       return false;
+    });
+
+  // Keep existing synchronous page initializers behind server-side role verification.
+  var nativeAdd=document.addEventListener.bind(document);
+  document.addEventListener=function(type,listener,options){
+    if(type==='DOMContentLoaded'&&typeof listener==='function'){
+      return nativeAdd(type,function(event){window.__COOKMATE_ADMIN_AUTH_READY__.then(function(){if(adminUser)listener.call(document,event);});},options);
     }
+    return nativeAdd(type,listener,options);
+  };
 
-    // Nếu là Admin hợp lệ: đảm bảo hiển thị bình thường
-    if (document.documentElement && document.documentElement.style.display === 'none') {
-      document.documentElement.style.display = '';
-    }
-    return true;
-  }
-
-  // Chạy ngay lập tức khi file script này được tải trong <head>
-  verifyAdminAccess();
-
-  // Bảo vệ chống khôi phục từ Back/Forward Cache (bfcache)
-  window.addEventListener('pageshow', function (event) {
-    if (event.persisted) {
-      verifyAdminAccess();
-    }
-  });
-
-  // Export hàm kiểm tra cho DOMContentLoaded trong các trang admin
-  window.checkAdminAuth = function () {
-    var isValid = verifyAdminAccess();
-    if (!isValid) return false;
-
-    var admin = getValidAdminSession();
-    if (admin) {
-      var nameEl = document.getElementById('adminUserName');
-      var avatarEl = document.getElementById('adminUserAvatar');
-      if (nameEl) nameEl.textContent = admin.name;
-      if (avatarEl) avatarEl.textContent = admin.name.charAt(0).toUpperCase();
-    }
+  window.checkAdminAuth=function(){
+    if(!adminUser)return false;
+    var name=document.getElementById('adminUserName');var avatar=document.getElementById('adminUserAvatar');
+    if(name)name.textContent=adminUser.name;
+    if(avatar)avatar.textContent=String(adminUser.name||'A').charAt(0).toUpperCase();
     return true;
   };
 
-  // Export hàm đăng xuất chuẩn cho Admin Shell
-  window.handleAdminLogout = function () {
-    try {
-      localStorage.removeItem('cookmate_current_user');
-      localStorage.removeItem('cookmate_admin_session');
-      sessionStorage.removeItem('cookmate_sidebar_closed');
-      sessionStorage.removeItem('cookmate_sidebar_scroll');
-    } catch (e) {}
-
-    if (typeof CookMateUI !== 'undefined') {
-      CookMateUI.showToast('Đã đăng xuất khỏi Quản trị thành công', 'success');
-    }
-    setTimeout(function () {
-      window.location.replace('../../index.html');
-    }, 300);
+  window.handleAdminLogout=function(){
+    var token=window.__COOKMATE_CSRF_TOKEN__||'';
+    fetch(base+'/api/auth/logout',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','X-CSRF-Token':token},body:'{}'})
+      .catch(function(){})
+      .finally(function(){window.location.replace('../../index.html');});
   };
-
-  // Gán đè hàm handleLogout cục bộ trên các trang admin
-  window.handleLogout = window.handleAdminLogout;
-
+  window.handleLogout=window.handleAdminLogout;
+  window.addEventListener('pageshow',function(event){if(event.persisted)window.location.reload();});
 })();

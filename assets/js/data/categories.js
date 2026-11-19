@@ -1,6 +1,6 @@
 /**
- * CookMate - Danh sách danh mục món ăn
- * Dữ liệu chuẩn cho bảng DANHMUC
+ * CookMate - Danh sách 8 danh mục món ăn chuẩn ảnh chụp ẩm thực thật
+ * Dữ liệu chuẩn đồng bộ MySQL bảng categories (0 file .svg)
  */
 
 const CATEGORIES = [
@@ -8,72 +8,72 @@ const CATEGORIES = [
     id: 1,
     name: 'Món chính',
     slug: 'mon-chinh',
-    icon: 'fa-drumstick-bite',
-    image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=500&auto=format&fit=crop&q=80',
-    description: 'Các món ăn chính đậm đà, giàu năng lượng cho bữa cơm gia đình đầm ấm.',
-    recipeCount: 0
+    icon: 'fa-utensils',
+    image: 'https://www.cet.edu.vn/wp-content/uploads/2018/03/thit-kho-tau-trung-cut.jpg',
+    description: 'Các món mặn, kho, rim, bún cơm đậm đà cho bữa chính.',
+    recipeCount: 45
   },
   {
     id: 2,
     name: 'Món canh - Súp',
     slug: 'mon-canh-sup',
     icon: 'fa-bowl-food',
-    image: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=500&auto=format&fit=crop&q=80',
-    description: 'Các món canh ngọt mát, súp thanh nhẹ giải nhiệt và bổ dưỡng.',
-    recipeCount: 0
+    image: 'https://cdn2.fptshop.com.vn/unsafe/2024_3_23_638467922672032197_batch_cach-nau-canh-chua-ca-loc.jpg',
+    description: 'Canh chua, súp bổ dưỡng và bún phở nước dùng thanh ngọt.',
+    recipeCount: 30
   },
   {
     id: 3,
     name: 'Món xào',
     slug: 'mon-xao',
-    icon: 'fa-fire-burner',
-    image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=500&auto=format&fit=crop&q=80',
-    description: 'Món xào giòn ngọt, chế biến nhanh gọn, màu sắc bắt mắt.',
-    recipeCount: 0
+    icon: 'fa-fire',
+    image: 'https://cdn2.fptshop.com.vn/unsafe/thit_bo_xao_thap_cam_2_7bb704dd0b.png',
+    description: 'Món xào nhanh lửa lớn giữ trọn độ giòn xanh và hương vị.',
+    recipeCount: 25
   },
   {
     id: 4,
     name: 'Món nướng - Chiên',
     slug: 'mon-nuong-chien',
-    icon: 'fa-fire',
-    image: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=600&auto=format&fit=crop&q=80',
-    description: 'Món nướng thơm lừng, chiên giòn rụm kích thích vị giác.',
-    recipeCount: 0
+    icon: 'fa-drumstick-bite',
+    image: 'https://www.huongnghiepaau.com/wp-content/uploads/2018/06/ga-nuong-mat-ong.jpg',
+    description: 'Món nướng thơm lừng và món chiên giòn rụm vàng ươm.',
+    recipeCount: 25
   },
   {
     id: 5,
     name: 'Món chay',
     slug: 'mon-chay',
     icon: 'fa-leaf',
-    image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=500&auto=format&fit=crop&q=80',
-    description: 'Ẩm thực chay thanh tịnh, thuần khiết từ rau củ tươi ngon.',
-    recipeCount: 0
+    image: 'https://cdn.tgdd.vn/2024/01/CookRecipe/GalleryStep/thanh-pham-44.jpg',
+    description: 'Thực đơn thuần thực vật thanh đạm, đủ đạm và cân bằng dinh dưỡng.',
+    recipeCount: 25
   },
   {
     id: 6,
     name: 'Món tráng miệng',
     slug: 'mon-trang-mieng',
-    icon: 'fa-cake-candles',
-    image: 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=500&auto=format&fit=crop&q=80',
-    description: 'Chè ngọt ngào, bánh trái thanh mát khép lại bữa ăn hoàn hảo.',
-    recipeCount: 0
+    icon: 'fa-ice-cream',
+    image: 'https://www.lorca.vn/wp-content/uploads/2022/11/maxresdefault-8.jpg',
+    description: 'Chè truyền thống, bánh ngọt, rau câu và tráng miệng thanh mát.',
+    recipeCount: 18
   },
   {
     id: 7,
     name: 'Đồ uống',
     slug: 'do-uong',
     icon: 'fa-mug-hot',
-    image: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=500&auto=format&fit=crop&q=80',
-    description: 'Sinh tố tươi mát, nước ép thanh lọc cơ thể và giải khát tức thì.',
-    recipeCount: 0
+    image: 'https://cdn2.fptshop.com.vn/unsafe/640x0/filters:format(webp):quality(75)/cach_lam_tra_dao_cam_sa_2313d177e5.jpg',
+    description: 'Cà phê phin, trà trái cây, sinh tố và sữa hạt bổ dưỡng.',
+    recipeCount: 14
   },
   {
     id: 8,
     name: 'Món khai vị',
     slug: 'mon-khai-vi',
     icon: 'fa-plate-wheat',
-    image: 'https://images.unsplash.com/photo-1541014741259-de529411b96a?w=500&auto=format&fit=crop&q=80',
-    description: 'Gỏi nộm, nem cuốn giòn tan khởi đầu bữa tiệc thêm rộn rã.',
-    recipeCount: 0
+    image: 'https://www.cet.edu.vn/wp-content/uploads/2018/11/goi-cuon-tom-thit.jpg',
+    description: 'Gỏi cuốn, nộm thanh mát, chả giò và món khai tiệc nhẹ.',
+    recipeCount: 18
   }
 ];

@@ -7,7 +7,10 @@ var CookMateAuthUI = (function () {
   'use strict';
 
   var state = {
-    isPhoLifted: false
+    isPhoLifted: false,
+    resetEmail: '',
+    otpTimerId: null,
+    otpRemainingSeconds: 300
   };
 
   /**
@@ -105,7 +108,7 @@ var CookMateAuthUI = (function () {
     function evaluate(pw) {
       if (!pw || pw.length === 0) return 0;
       var score = 0;
-      if (pw.length >= 6) score++;
+      if (pw.length >= 8) score++;
       if (pw.length >= 10) score++;
       if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
       if (/[0-9]/.test(pw) || /[^A-Za-z0-9]/.test(pw)) score++;
@@ -126,49 +129,13 @@ var CookMateAuthUI = (function () {
 
       if (strengthText) {
         if (!val) {
-          strengthText.textContent = 'Tối thiểu 6 ký tự';
+          strengthText.textContent = 'Tối thiểu 8 ký tự';
           strengthText.style.color = '#78716C';
         } else {
           strengthText.textContent = labels[score] || 'Quá ngắn';
           strengthText.style.color = colors[score] || '#78716C';
         }
       }
-    });
-  }
-
-  /**
-   * Điền nhanh tài khoản mẫu (1-Click Demo Account Quick Fill)
-   */
-  function setupDemoAccounts() {
-    var demoCards = document.querySelectorAll('.auth-demo-card');
-    demoCards.forEach(function (card) {
-      card.addEventListener('click', function () {
-        var email = card.getAttribute('data-email');
-        var pass = card.getAttribute('data-password');
-
-        var emailInput = document.getElementById('loginEmail');
-        var passInput = document.getElementById('loginPassword');
-        if (emailInput) {
-          emailInput.value = email;
-          emailInput.classList.remove('input-error');
-        }
-        if (passInput) {
-          passInput.value = pass;
-          passInput.classList.remove('input-error');
-        }
-
-        var errEmail = document.getElementById('loginEmailError');
-        var errPass = document.getElementById('loginPasswordError');
-        if (errEmail) errEmail.classList.remove('is-visible');
-        if (errPass) errPass.classList.remove('is-visible');
-
-        // Kích hoạt nhấc đũa phở chào mừng
-        triggerPho(true);
-
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Đã nạp tài khoản mẫu: ' + email, 'info');
-        }
-      });
     });
   }
 
@@ -233,113 +200,42 @@ var CookMateAuthUI = (function () {
         submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang xác thực...</span>';
       }
 
-      setTimeout(function () {
-        // Kiểm tra thông tin đăng nhập trong demo credentials + localStorage
-        var demoCreds = typeof DEMO_CREDENTIALS !== 'undefined' ? DEMO_CREDENTIALS : [];
-        var savedCreds = typeof CookMateStorage !== 'undefined' ? CookMateStorage.get('cookmate_demo_creds') || [] : [];
-        var allCreds = demoCreds.concat(savedCreds);
-
-        var match = allCreds.find(function (c) {
-          return c.email.toLowerCase() === email.toLowerCase() && c.passwordHint === password;
-        });
-
-        if (match && typeof CookMateStorage !== 'undefined') {
-          var allUsers = CookMateStorage.getAllUsers();
-          var user = allUsers.find(function (u) {
-            return u.id === match.userId || u.email.toLowerCase() === email.toLowerCase();
-          });
-
-          if (user) {
-            if (user.status === 'inactive') {
-              if (submitBtn) {
-                submitBtn.classList.remove('is-loading');
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>Đăng nhập</span>';
-              }
-              if (emailInput) emailInput.classList.add('input-error');
-              if (emailErr) {
-                emailErr.textContent = 'Tài khoản của bạn đã bị tạm khóa bởi Quản trị viên.';
-                emailErr.classList.add('is-visible');
-              }
-              if (typeof CookMateUI !== 'undefined') {
-                CookMateUI.showToast('Tài khoản của bạn đã bị tạm khóa bởi Quản trị viên.', 'error');
-              }
-              return;
-            }
-
-            CookMateStorage.setCurrentUser(user);
-            if (typeof CookMateStorage._apiRequest === 'function') {
-              CookMateStorage._apiRequest('POST', '/api/auth/login', { email: email, password: password });
-            }
-            if (typeof CookMateUI !== 'undefined') {
-              CookMateUI.showToast('Đăng nhập thành công! Chào mừng ' + user.name, 'success');
-            }
-            if (typeof Navigation !== 'undefined') {
-              Navigation.updateAuthArea();
-              if (typeof updateFavoriteBadge === 'function') updateFavoriteBadge();
-            }
-
-            if (submitBtn) {
-              submitBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>Thành công!</span>';
-            }
-
-            // Hiệu ứng phở bay bổng khi đăng nhập thành công
-            triggerPho(true);
-
-            setTimeout(function () {
-              // Điều hướng tự động theo vai trò tài khoản
-              var urlParams = new URLSearchParams(window.location.search);
-              var redirectUrl = urlParams.get('redirect');
-
-              if (user.role === 'admin') {
-                if (redirectUrl && (redirectUrl.includes('admin/') || redirectUrl.startsWith('pages/admin/'))) {
-                  if (redirectUrl.startsWith('pages/')) {
-                    window.location.href = '../../' + redirectUrl;
-                  } else {
-                    window.location.href = redirectUrl;
-                  }
-                  return;
-                }
-                window.location.href = '../../pages/admin/index.html';
-                return;
-              }
-
-              // Đối với thành viên (member): kiểm tra redirect URL hợp lệ
-              if (redirectUrl) {
-                // TUYỆT ĐỐI KHÔNG redirect Member vào khu vực Admin (ngăn ngừa lặp vô hạn)
-                if (!redirectUrl.includes('admin/') && !redirectUrl.includes('pages/admin/')) {
-                  if (redirectUrl.startsWith('pages/')) {
-                    window.location.href = '../../' + redirectUrl;
-                  } else if (redirectUrl.startsWith('./') || redirectUrl.startsWith('../')) {
-                    window.location.href = redirectUrl;
-                  }
-                  return;
-                }
-              }
-              // Mặc định Thành viên về trang chủ
-              window.location.href = '../../index.html';
-            }, 300);
+      CookMateStorage.login(email, password).then(function (data) {
+        var user = data.user;
+        if (user && (user.must_change_password || user.mustChangePassword)) {
+          if (submitBtn) {
+            submitBtn.classList.remove('is-loading');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>Đăng nhập</span>';
+          }
+          if (typeof CookMateStorage.enforceMandatoryPasswordChange === 'function') {
+            CookMateStorage.enforceMandatoryPasswordChange();
+          }
+          return;
+        }
+        if (typeof CookMateUI !== 'undefined') CookMateUI.showToast('Đăng nhập thành công! Chào mừng ' + user.name, 'success');
+        if (typeof Navigation !== 'undefined') Navigation.updateAuthArea();
+        if (typeof updateFavoriteBadge === 'function') updateFavoriteBadge();
+        if (submitBtn) submitBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>Thành công!</span>';
+        triggerPho(true);
+        setTimeout(function () {
+          var redirectUrl = new URLSearchParams(window.location.search).get('redirect');
+          if (user.role === 'admin') {
+            if (redirectUrl && redirectUrl.indexOf('admin/') !== -1 && !/^https?:/i.test(redirectUrl)) {
+              window.location.href = redirectUrl.indexOf('pages/') === 0 ? '../../' + redirectUrl : redirectUrl;
+            } else window.location.href = '../../pages/admin/index.html';
             return;
           }
-        }
-
-        // Thất bại
-        if (submitBtn) {
-          submitBtn.classList.remove('is-loading');
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>Đăng nhập</span>';
-        }
-
+          if (redirectUrl && redirectUrl.indexOf('admin/') === -1 && !/^https?:/i.test(redirectUrl)) {
+            window.location.href = redirectUrl.indexOf('pages/') === 0 ? '../../' + redirectUrl : redirectUrl;
+          } else window.location.href = '../../index.html';
+        }, 300);
+      }).catch(function (error) {
+        if (submitBtn) { submitBtn.classList.remove('is-loading'); submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> <span>Đăng nhập</span>'; }
         if (passInput) passInput.classList.add('input-error');
-        if (passErr) {
-          passErr.textContent = 'Email hoặc mật khẩu không chính xác';
-          passErr.classList.add('is-visible');
-        }
-
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Email hoặc mật khẩu không đúng', 'error');
-        }
-      }, 100);
+        if (passErr) { passErr.textContent = error.message || 'Không thể đăng nhập. Vui lòng thử lại.'; passErr.classList.add('is-visible'); }
+        if (typeof CookMateUI !== 'undefined') CookMateUI.showToast(error.message || 'Không thể kết nối Backend.', 'error');
+      });
     });
   }
 
@@ -414,10 +310,10 @@ var CookMateAuthUI = (function () {
           passErr.classList.add('is-visible');
         }
         hasError = true;
-      } else if (password.length < 6) {
+      } else if (password.length < 8) {
         if (passInput) passInput.classList.add('input-error');
         if (passErr) {
-          passErr.textContent = 'Mật khẩu phải có ít nhất 6 ký tự';
+          passErr.textContent = 'Mật khẩu phải có ít nhất 8 ký tự';
           passErr.classList.add('is-visible');
         }
         hasError = true;
@@ -450,22 +346,6 @@ var CookMateAuthUI = (function () {
 
       if (hasError) return;
 
-      // Kiểm tra trùng email
-      if (typeof CookMateStorage !== 'undefined') {
-        var allUsers = CookMateStorage.getAllUsers();
-        var exists = allUsers.some(function (u) {
-          return u.email.toLowerCase() === email.toLowerCase();
-        });
-        if (exists) {
-          if (emailInput) emailInput.classList.add('input-error');
-          if (emailErr) {
-            emailErr.textContent = 'Email này đã được sử dụng';
-            emailErr.classList.add('is-visible');
-          }
-          return;
-        }
-      }
-
       // Loading
       if (submitBtn) {
         submitBtn.classList.add('is-loading');
@@ -473,39 +353,402 @@ var CookMateAuthUI = (function () {
         submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang khởi tạo tài khoản...</span>';
       }
 
-      setTimeout(function () {
-        if (typeof CookMateStorage !== 'undefined') {
-          var res = CookMateStorage.registerUser({
-            name: name,
-            email: email,
-            password: password
-          });
+      CookMateStorage.registerUser({ name:name, email:email, password:password }).then(function () {
+        if (typeof CookMateUI !== 'undefined') CookMateUI.showToast('Đăng ký thành công!', 'success');
+        triggerPho(true);
+        setTimeout(function () { window.location.href = '../../index.html'; }, 700);
+      }).catch(function (error) {
+        if (submitBtn) { submitBtn.classList.remove('is-loading'); submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> <span>Đăng ký tài khoản</span>'; }
+        var message=error.message||'Có lỗi khi đăng ký.';
+        if (emailErr && /email|sử dụng/i.test(message)) { emailErr.textContent=message; emailErr.classList.add('is-visible'); }
+        if (typeof CookMateUI !== 'undefined') CookMateUI.showToast(message, 'error');
+      });
+    });
+  }
 
-          if (res && !res.error) {
-            if (typeof CookMateUI !== 'undefined') {
-              CookMateUI.showToast('Đăng ký tài khoản thành công! Đang chuyển hướng sang Đăng nhập...', 'success');
-            }
+  /**
+   * Luồng Quên mật khẩu 3 bước bằng OTP Terminal (DEMO_MODE)
+   * Render động từng bước vào #forgotPasswordWrap để bước chưa tới không tồn tại trong DOM
+   */
+  function setupForgotPasswordFlow() {
+    var loginViewWrap = document.getElementById('loginViewWrap');
+    var forgotWrap = document.getElementById('forgotPasswordWrap');
+    var forgotLink = document.getElementById('forgotPasswordLink');
 
-            // Hiệu ứng phở khi đăng ký thành công
-            triggerPho(true);
+    if (!loginViewWrap || !forgotWrap || !forgotLink) return;
 
-            setTimeout(function () {
-              window.location.href = 'login.html';
-            }, 1000);
+    function stopOtpTimer() {
+      if (state.otpTimerId) {
+        clearInterval(state.otpTimerId);
+        state.otpTimerId = null;
+      }
+    }
+
+    function formatTimer(sec) {
+      var s = Math.max(0, Number(sec) || 0);
+      var mins = Math.floor(s / 60);
+      var rem = s % 60;
+      return String(mins) + ':' + (rem < 10 ? '0' + rem : String(rem));
+    }
+
+    function clearFieldErr(inp, errEl) {
+      if (inp) inp.classList.remove('input-error');
+      if (errEl) {
+        errEl.textContent = '';
+        errEl.classList.remove('is-visible');
+        errEl.style.display = 'none';
+      }
+    }
+
+    function showFieldErr(inp, errEl, message) {
+      if (inp) inp.classList.add('input-error');
+      if (errEl) {
+        errEl.textContent = message;
+        errEl.classList.add('is-visible');
+        errEl.style.display = 'block';
+      }
+    }
+
+    function backToLogin(e) {
+      if (e) e.preventDefault();
+      stopOtpTimer();
+      state.resetEmail = '';
+      forgotWrap.innerHTML = '';
+      forgotWrap.style.display = 'none';
+      loginViewWrap.style.display = 'block';
+    }
+
+    function renderStep1() {
+      stopOtpTimer();
+      loginViewWrap.style.display = 'none';
+      forgotWrap.style.display = 'block';
+      forgotWrap.innerHTML = '' +
+        '<div id="forgotStep1" class="forgot-step">' +
+          '<div class="forgot-step__badge" aria-hidden="true">' +
+            '<i class="fa-solid fa-key"></i>' +
+          '</div>' +
+          '<h2 class="auth-title">Khôi phục mật khẩu</h2>' +
+          '<p class="auth-subtitle">Nhập địa chỉ email đã đăng ký để nhận mã xác minh.</p>' +
+          '<form id="forgotEmailForm" novalidate>' +
+            '<div class="auth-field">' +
+              '<label for="forgotEmailInput" class="auth-label">' +
+                '<span><i class="fa-regular fa-envelope"></i> Email đăng ký</span>' +
+              '</label>' +
+              '<div class="auth-input-wrap">' +
+                '<i class="fa-regular fa-envelope auth-field-icon"></i>' +
+                '<input type="email" id="forgotEmailInput" name="forgotEmail" class="auth-input" placeholder="Nhập địa chỉ email đã đăng ký" autocomplete="email" required>' +
+              '</div>' +
+              '<div class="auth-error-msg form-error" id="forgotEmailError" role="alert"></div>' +
+            '</div>' +
+            '<div class="auth-btn-stack">' +
+              '<button type="submit" class="auth-action-btn" id="forgotSendOtpBtn">' +
+                '<i class="fa-solid fa-paper-plane"></i>' +
+                '<span>Gửi mã xác minh</span>' +
+              '</button>' +
+              '<button type="button" class="auth-back-btn" id="forgotStep1BackBtn">' +
+                '<i class="fa-solid fa-arrow-left"></i>' +
+                '<span>Quay lại đăng nhập</span>' +
+              '</button>' +
+            '</div>' +
+          '</form>' +
+        '</div>';
+
+      var emailForm = document.getElementById('forgotEmailForm');
+      var emailInput = document.getElementById('forgotEmailInput');
+      var emailErr = document.getElementById('forgotEmailError');
+      var sendOtpBtn = document.getElementById('forgotSendOtpBtn');
+      var step1BackBtn = document.getElementById('forgotStep1BackBtn');
+
+      if (step1BackBtn) step1BackBtn.addEventListener('click', backToLogin);
+      if (emailInput) emailInput.focus();
+
+      if (emailForm) {
+        emailForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          clearFieldErr(emailInput, emailErr);
+
+          var email = emailInput ? emailInput.value.trim() : '';
+          var strictEmailRe = /^[A-Za-z0-9](?:[A-Za-z0-9._%+-]*[A-Za-z0-9])?@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+
+          if (!email) {
+            showFieldErr(emailInput, emailErr, 'Vui lòng nhập địa chỉ email đã đăng ký.');
             return;
-          } else {
+          }
+          if (email.length > 150 || email.indexOf('..') !== -1 || !strictEmailRe.test(email)) {
+            showFieldErr(emailInput, emailErr, 'Định dạng email không hợp lệ.');
+            return;
+          }
+
+          if (sendOtpBtn) {
+            sendOtpBtn.disabled = true;
+            sendOtpBtn.classList.add('is-loading');
+            sendOtpBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang gửi mã xác minh...</span>';
+          }
+
+          CookMateStorage.requestPasswordResetOtp(email).then(function (data) {
+            state.resetEmail = email;
+            renderStep2();
             if (typeof CookMateUI !== 'undefined') {
-              CookMateUI.showToast(res.error || 'Có lỗi khi đăng ký', 'error');
+              CookMateUI.showToast((data && data.message) || 'Nếu email tồn tại trong hệ thống, mã xác minh đã được cấp.', 'info');
+            }
+          }).catch(function (err) {
+            var msg = (err && err.message) || 'Không thể gửi mã xác minh. Vui lòng thử lại.';
+            showFieldErr(emailInput, emailErr, msg);
+            if (typeof CookMateUI !== 'undefined') CookMateUI.showToast(msg, 'error');
+          }).finally(function () {
+            if (sendOtpBtn && document.body.contains(sendOtpBtn)) {
+              sendOtpBtn.disabled = false;
+              sendOtpBtn.classList.remove('is-loading');
+              sendOtpBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> <span>Gửi mã xác minh</span>';
+            }
+          });
+        });
+      }
+    }
+
+    function renderStep2() {
+      stopOtpTimer();
+      loginViewWrap.style.display = 'none';
+      forgotWrap.style.display = 'block';
+      forgotWrap.innerHTML = '' +
+        '<div id="forgotStep2" class="forgot-step">' +
+          '<div class="forgot-step__badge" aria-hidden="true">' +
+            '<i class="fa-solid fa-shield-halved"></i>' +
+          '</div>' +
+          '<h2 class="auth-title">Xác minh tài khoản</h2>' +
+          '<p class="auth-subtitle">Nhập mã xác minh 6 chữ số được cấp trong Terminal.</p>' +
+          '<div class="otp-timer-row">' +
+            '<i class="fa-regular fa-clock"></i>' +
+            '<span>Thời gian còn lại:</span>' +
+            '<span class="otp-timer-value" id="otpCountdownTimer">5:00</span>' +
+          '</div>' +
+          '<form id="forgotVerifyOtpForm" novalidate>' +
+            '<div class="auth-field">' +
+              '<label for="forgotOtpInput" class="auth-label">' +
+                '<span><i class="fa-solid fa-hashtag"></i> Mã xác minh (6 chữ số)</span>' +
+              '</label>' +
+              '<div class="auth-input-wrap">' +
+                '<input type="text" id="forgotOtpInput" name="otp" class="auth-input otp-single-input" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" aria-label="Mã xác minh 6 chữ số" required>' +
+              '</div>' +
+              '<div class="auth-error-msg form-error" id="forgotOtpError" role="alert"></div>' +
+            '</div>' +
+            '<div class="auth-btn-stack">' +
+              '<button type="submit" class="auth-action-btn" id="forgotVerifyOtpBtn">' +
+                '<i class="fa-solid fa-circle-check"></i>' +
+                '<span>Xác minh</span>' +
+              '</button>' +
+              '<button type="button" class="auth-secondary-btn" id="forgotResendOtpBtn">' +
+                '<i class="fa-solid fa-rotate-right"></i>' +
+                '<span>Gửi lại mã</span>' +
+              '</button>' +
+              '<button type="button" class="auth-back-btn" id="forgotStep2BackBtn">' +
+                '<i class="fa-solid fa-arrow-left"></i>' +
+                '<span>Quay lại đăng nhập</span>' +
+              '</button>' +
+            '</div>' +
+          '</form>' +
+        '</div>';
+
+      var otpForm = document.getElementById('forgotVerifyOtpForm');
+      var otpInput = document.getElementById('forgotOtpInput');
+      var otpErr = document.getElementById('forgotOtpError');
+      var verifyOtpBtn = document.getElementById('forgotVerifyOtpBtn');
+      var resendOtpBtn = document.getElementById('forgotResendOtpBtn');
+      var step2BackBtn = document.getElementById('forgotStep2BackBtn');
+      var timerEl = document.getElementById('otpCountdownTimer');
+
+      function startOtpTimer(seconds) {
+        stopOtpTimer();
+        state.otpRemainingSeconds = typeof seconds === 'number' ? seconds : 300;
+        if (timerEl) timerEl.textContent = formatTimer(state.otpRemainingSeconds);
+
+        state.otpTimerId = setInterval(function () {
+          state.otpRemainingSeconds -= 1;
+          if (timerEl) timerEl.textContent = formatTimer(state.otpRemainingSeconds);
+          if (state.otpRemainingSeconds <= 0) {
+            stopOtpTimer();
+            showFieldErr(otpInput, otpErr, 'Mã xác minh đã hết hạn. Vui lòng gửi lại mã.');
+          }
+        }, 1000);
+      }
+
+      startOtpTimer(300);
+      if (step2BackBtn) step2BackBtn.addEventListener('click', backToLogin);
+      if (otpInput) otpInput.focus();
+
+      if (otpForm) {
+        otpForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          clearFieldErr(otpInput, otpErr);
+
+          var otp = otpInput ? otpInput.value.trim() : '';
+          if (!/^[0-9]{6}$/.test(otp)) {
+            var fmtMsg = 'Mã xác minh phải gồm đúng 6 chữ số.';
+            showFieldErr(otpInput, otpErr, fmtMsg);
+            if (typeof CookMateUI !== 'undefined') CookMateUI.showToast(fmtMsg, 'warning');
+            return;
+          }
+
+          if (verifyOtpBtn) {
+            verifyOtpBtn.disabled = true;
+            verifyOtpBtn.classList.add('is-loading');
+            verifyOtpBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang xác minh...</span>';
+          }
+
+          CookMateStorage.verifyPasswordResetOtp(state.resetEmail, otp).then(function (data) {
+            stopOtpTimer();
+            var tempPw = (data && data.temporary_password) || '';
+            renderStep3(tempPw);
+            triggerPho(true);
+            if (typeof CookMateUI !== 'undefined') {
+              CookMateUI.showToast((data && data.message) || 'Khôi phục mật khẩu thành công!', 'success');
+            }
+          }).catch(function (err) {
+            var msg = (err && err.message) || 'Mã xác minh không hợp lệ.';
+            showFieldErr(otpInput, otpErr, msg);
+            if (typeof CookMateUI !== 'undefined') CookMateUI.showToast(msg, 'error');
+          }).finally(function () {
+            if (verifyOtpBtn && document.body.contains(verifyOtpBtn)) {
+              verifyOtpBtn.disabled = false;
+              verifyOtpBtn.classList.remove('is-loading');
+              verifyOtpBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>Xác minh</span>';
+            }
+          });
+        });
+      }
+
+      if (resendOtpBtn) {
+        resendOtpBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          clearFieldErr(otpInput, otpErr);
+          if (!state.resetEmail) return;
+
+          resendOtpBtn.disabled = true;
+          CookMateStorage.resendPasswordResetOtp(state.resetEmail).then(function (data) {
+            if (otpInput) otpInput.value = '';
+            clearFieldErr(otpInput, otpErr);
+            startOtpTimer(300);
+            if (typeof CookMateUI !== 'undefined') {
+              CookMateUI.showToast((data && data.message) || 'Đã gửi lại mã xác minh mới vào Terminal.', 'info');
+            }
+          }).catch(function (err) {
+            var msg = (err && err.message) || 'Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.';
+            showFieldErr(otpInput, otpErr, msg);
+            if (typeof CookMateUI !== 'undefined') CookMateUI.showToast(msg, 'warning');
+          }).finally(function () {
+            if (resendOtpBtn && document.body.contains(resendOtpBtn)) {
+              resendOtpBtn.disabled = false;
+            }
+          });
+        });
+      }
+    }
+
+    function renderStep3(tempPassword) {
+      stopOtpTimer();
+      loginViewWrap.style.display = 'none';
+      forgotWrap.style.display = 'block';
+      forgotWrap.innerHTML = '' +
+        '<div id="forgotStep3" class="forgot-step">' +
+          '<div class="forgot-step__badge forgot-step__badge--success" aria-hidden="true">' +
+            '<i class="fa-solid fa-check"></i>' +
+          '</div>' +
+          '<h2 class="auth-title">Khôi phục mật khẩu thành công!</h2>' +
+          '<p class="auth-subtitle">CookMate đã cấp cho bạn một mật khẩu mới.</p>' +
+          '<div class="auth-field">' +
+            '<label for="tempPasswordDisplay" class="auth-label">' +
+              '<span><i class="fa-solid fa-key"></i> Mật khẩu mới</span>' +
+            '</label>' +
+            '<div class="auth-input-wrap">' +
+              '<i class="fa-solid fa-lock auth-field-icon"></i>' +
+              '<input type="password" id="tempPasswordDisplay" class="auth-input temp-password-input" readonly value="" aria-label="Mật khẩu mới">' +
+              '<button type="button" class="password-toggle-btn" id="toggleTempPasswordBtn" data-target="tempPasswordDisplay" aria-label="Hiện mật khẩu">' +
+                '<i class="fa-regular fa-eye"></i>' +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="temp-password-warning" role="alert">' +
+            '<i class="fa-solid fa-triangle-exclamation"></i>' +
+            '<span>Vui lòng lưu mật khẩu này. Mật khẩu chỉ được hiển thị một lần. Sau khi đăng nhập, bạn nên đổi sang mật khẩu riêng của mình.</span>' +
+          '</div>' +
+          '<div class="auth-btn-stack">' +
+            '<button type="button" class="auth-secondary-btn" id="copyTempPasswordBtn">' +
+              '<i class="fa-regular fa-copy"></i>' +
+              '<span>Sao chép mật khẩu</span>' +
+            '</button>' +
+            '<button type="button" class="auth-action-btn" id="forgotSuccessBackToLoginBtn">' +
+              '<i class="fa-solid fa-right-to-bracket"></i>' +
+              '<span>Về trang đăng nhập</span>' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+
+      var tempPwInput = document.getElementById('tempPasswordDisplay');
+      var toggleTempPwBtn = document.getElementById('toggleTempPasswordBtn');
+      var copyTempPwBtn = document.getElementById('copyTempPasswordBtn');
+      var successBackBtn = document.getElementById('forgotSuccessBackToLoginBtn');
+
+      if (tempPwInput) {
+        tempPwInput.type = 'password';
+        tempPwInput.value = tempPassword || '';
+      }
+
+      if (toggleTempPwBtn && tempPwInput) {
+        toggleTempPwBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          var isPw = tempPwInput.type === 'password';
+          tempPwInput.type = isPw ? 'text' : 'password';
+          var icon = toggleTempPwBtn.querySelector('i');
+          if (icon) {
+            icon.className = isPw ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye';
+          }
+          toggleTempPwBtn.setAttribute('aria-label', isPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+        });
+      }
+
+      if (copyTempPwBtn) {
+        copyTempPwBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          var secret = tempPwInput ? tempPwInput.value : '';
+          if (!secret) return;
+
+          function onCopied() {
+            if (typeof CookMateUI !== 'undefined') {
+              CookMateUI.showToast('Đã sao chép mật khẩu mới!', 'success');
             }
           }
-        }
 
-        if (submitBtn) {
-          submitBtn.classList.remove('is-loading');
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> <span>Đăng ký tài khoản</span>';
-        }
-      }, 500);
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(secret).then(onCopied).catch(function () {
+              fallbackCopy(secret);
+              onCopied();
+            });
+          } else {
+            fallbackCopy(secret);
+            onCopied();
+          }
+        });
+      }
+
+      if (successBackBtn) {
+        successBackBtn.addEventListener('click', backToLogin);
+      }
+    }
+
+    function fallbackCopy(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      ta.remove();
+    }
+
+    forgotLink.addEventListener('click', function (e) {
+      e.preventDefault();
+      renderStep1();
     });
   }
 
@@ -539,9 +782,15 @@ var CookMateAuthUI = (function () {
    * Khởi tạo toàn bộ tương tác Auth
    */
   function init() {
-    // 1. Kiểm tra session hiện tại - Nếu đã đăng nhập, chuyển hướng theo vai trò
+    // 1. Kiểm tra session hiện tại - Nếu đã đăng nhập, kiểm tra bắt buộc đổi mật khẩu hoặc chuyển hướng theo vai trò
     if (typeof CookMateStorage !== 'undefined' && CookMateStorage.isLoggedIn()) {
       var currentUser = CookMateStorage.getCurrentUser();
+      if (currentUser && (currentUser.must_change_password || currentUser.mustChangePassword)) {
+        if (typeof CookMateStorage.enforceMandatoryPasswordChange === 'function') {
+          CookMateStorage.enforceMandatoryPasswordChange();
+        }
+        return;
+      }
       if (currentUser && currentUser.role === 'admin') {
         window.location.href = '../../pages/admin/index.html';
       } else {
@@ -574,9 +823,9 @@ var CookMateAuthUI = (function () {
     // 4. Cài đặt các tính năng con
     setupPasswordToggles();
     setupPasswordStrength();
-    setupDemoAccounts();
     setupLoginForm();
     setupRegisterForm();
+    setupForgotPasswordFlow();
     setupSocialAuth();
 
     console.log('🍜 CookMate Pho Auth UI V2 initialized successfully');

@@ -102,11 +102,11 @@
   --transition-slow: 350ms ease;
 
   /* ---- Z-index Scale ---- */
-  --z-dropdown: 100;
+  --z-dropdown: 1000;
   --z-sticky: 200;
-  --z-modal-backdrop: 300;
-  --z-modal: 400;
-  --z-toast: 500;
+  --z-modal-backdrop: 10040;
+  --z-modal: 10050;
+  --z-toast: 10060;
 
   /* ---- Container ---- */
   --container: 1280px;

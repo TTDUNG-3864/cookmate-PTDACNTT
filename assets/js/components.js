@@ -5,9 +5,14 @@
 var CookMateUI = {
   // Toast notifications
   toastContainer: null,
+  _activeEscHandler: null,
 
   initToast: function () {
-    if (this.toastContainer) return;
+    var existing = document.getElementById('toastContainer');
+    if (existing) {
+      this.toastContainer = existing;
+      return;
+    }
     this.toastContainer = createElement('div', {
       className: 'toast-container',
       id: 'toastContainer'
@@ -28,13 +33,21 @@ var CookMateUI = {
       info: 'fa-circle-info'
     };
 
-    var toast = createElement('div', { className: 'toast toast-' + type });
+    var safeMsg = escapeHtml(String(message == null ? '' : message));
+    var toast = createElement('div', { className: 'toast toast--' + type + ' toast-' + type });
     toast.innerHTML =
-      '<i class="fa-solid ' + (icons[type] || icons.info) + ' toast-icon"></i>' +
-      '<span class="toast-message">' + escapeHtml(message) + '</span>' +
-      '<button class="toast-close" onclick="this.parentElement.remove()">' +
+      '<i class="fa-solid ' + (icons[type] || icons.info) + ' toast__icon toast-icon"></i>' +
+      '<div class="toast__content"><span class="toast__message toast-message">' + safeMsg + '</span></div>' +
+      '<button type="button" class="toast__close toast-close" aria-label="Đóng thông báo">' +
       '<i class="fa-solid fa-xmark"></i>' +
       '</button>';
+
+    var closeBtn = toast.querySelector('.toast__close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function () {
+        toast.remove();
+      });
+    }
 
     this.toastContainer.appendChild(toast);
 
@@ -44,11 +57,12 @@ var CookMateUI = {
     });
 
     setTimeout(function () {
+      if (!toast.parentElement) return;
       toast.classList.remove('toast-show');
-      toast.classList.add('toast-hide');
+      toast.classList.add('toast-exit', 'toast-hide');
       setTimeout(function () {
-        toast.remove();
-      }, 300);
+        if (toast.parentElement) toast.remove();
+      }, 250);
     }, duration);
   },
 
@@ -58,51 +72,70 @@ var CookMateUI = {
   showModal: function (options) {
     if (!options) options = {};
     var title = options.title || '';
+    var subtitle = options.subtitle || '';
     var content = options.content || '';
     var footer = options.footer || '';
     var size = options.size || 'medium';
     var onClose = options.onClose || null;
 
+    if (this._activeEscHandler) {
+      document.removeEventListener('keydown', this._activeEscHandler);
+      this._activeEscHandler = null;
+    }
+
     // Remove existing modal
     var existing = document.getElementById('cookmate-modal');
     if (existing) existing.remove();
 
-    var modal = createElement('div', { className: 'modal', id: 'cookmate-modal' });
+    var modal = createElement('div', {
+      className: 'modal active modal-show',
+      id: 'cookmate-modal',
+      role: 'dialog',
+      'aria-modal': 'true'
+    });
     modal.innerHTML =
-      '<div class="modal-backdrop"></div>' +
-      '<div class="modal-dialog modal-' + size + '">' +
-      '<div class="modal-header">' +
-      '<h3 class="modal-title">' + title + '</h3>' +
-      '<button class="modal-close" id="modalCloseBtn">' +
+      '<div class="modal__backdrop modal-backdrop"></div>' +
+      '<div class="modal__content modal-dialog modal-' + size + '">' +
+      '<div class="modal__header modal-header">' +
+      '<div class="modal__header-titles">' +
+      '<h3 class="modal__title modal-title">' + title + '</h3>' +
+      (subtitle ? '<p class="modal__subtitle">' + escapeHtml(subtitle) + '</p>' : '') +
+      '</div>' +
+      '<button type="button" class="modal__close modal-close" id="modalCloseBtn" aria-label="Đóng">' +
       '<i class="fa-solid fa-xmark"></i>' +
       '</button>' +
       '</div>' +
-      '<div class="modal-body">' + content + '</div>' +
-      (footer ? '<div class="modal-footer">' + footer + '</div>' : '') +
+      '<div class="modal__body modal-body">' + content + '</div>' +
+      (footer ? '<div class="modal__footer modal-footer">' + footer + '</div>' : '') +
       '</div>';
 
     document.body.appendChild(modal);
-    requestAnimationFrame(function () {
-      modal.classList.add('modal-show');
-    });
 
+    var self = this;
+    var closed = false;
     var closeModal = function () {
-      modal.classList.remove('modal-show');
-      setTimeout(function () {
-        modal.remove();
-        if (onClose) onClose();
-      }, 300);
+      if (closed) return;
+      closed = true;
+      if (self._activeEscHandler) {
+        document.removeEventListener('keydown', self._activeEscHandler);
+        self._activeEscHandler = null;
+      }
+      modal.classList.remove('active', 'modal-show');
+      if (modal.parentElement) modal.remove();
+      if (onClose) onClose();
     };
 
-    modal.querySelector('.modal-backdrop').addEventListener('click', closeModal);
-    modal.querySelector('#modalCloseBtn').addEventListener('click', closeModal);
+    var backdrop = modal.querySelector('.modal__backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeModal);
+    var closeBtn = modal.querySelector('#modalCloseBtn');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
 
     var escHandler = function (e) {
       if (e.key === 'Escape') {
         closeModal();
-        document.removeEventListener('keydown', escHandler);
       }
     };
+    this._activeEscHandler = escHandler;
     document.addEventListener('keydown', escHandler);
 
     return { modal: modal, close: closeModal };
@@ -158,9 +191,15 @@ var CookMateUI = {
 
     var isFav = CookMateStorage.isFavorite(recipe.id);
     var category = null;
-    if (typeof CATEGORIES !== 'undefined') {
-      category = CATEGORIES.find(function (c) { return c.id === recipe.categoryId; });
+    if (typeof CookMateStorage !== 'undefined' && typeof CookMateStorage.getCategoryById === 'function') {
+      category = CookMateStorage.getCategoryById(recipe.categoryId);
     }
+    if (!category && typeof CATEGORIES !== 'undefined') {
+      category = CATEGORIES.find(function (c) { return String(c.id) === String(recipe.categoryId); });
+    }
+    var catName = (category && category.name) || recipe.categoryName || '';
+    var catHint = escapeHtml(String(recipe.categoryId || (category && category.slug) || ''));
+    var imgSrc = getImageUrl(recipe.image, getCategoryFallbackImage(catHint));
 
     var detailUrl = (linkBase || getBasePath()) + 'pages/recipe-detail.html?id=' + recipe.id;
     var totalTime = (recipe.prepTime || 0) + (recipe.cookTime || 0);
@@ -173,7 +212,7 @@ var CookMateUI = {
     // 1. Ảnh món ăn
     html += '<a href="' + detailUrl + '" class="recipe-card__image-link">';
     html += '<div class="recipe-card__image">';
-    html += '<img src="' + (recipe.image || '') + '" alt="' + escapeHtml(recipe.title) + '" onerror="handleImageError(this)" loading="lazy">';
+    html += '<img src="' + escapeHtml(imgSrc) + '" alt="' + escapeHtml(recipe.title) + '" data-category-id="' + catHint + '" onerror="handleImageError(this, \'' + catHint + '\')" loading="lazy">';
     if (isFeatured) {
       html += '<span class="recipe-card__badge badge-featured"><i class="fa-solid fa-fire"></i> Nổi bật</span>';
     }
@@ -184,8 +223,8 @@ var CookMateUI = {
 
     // 2. Nội dung món ăn
     html += '<div class="recipe-card__content">';
-    if (category) {
-      html += '<span class="recipe-card__category">' + escapeHtml(category.name) + '</span>';
+    if (catName) {
+      html += '<span class="recipe-card__category">' + escapeHtml(catName) + '</span>';
     }
     html += '<h3 class="recipe-card__title"><a href="' + detailUrl + '">' + escapeHtml(recipe.title) + '</a></h3>';
     html += '<p class="recipe-card__desc">' + escapeHtml(truncateText(recipe.description, 80)) + '</p>';
@@ -241,10 +280,11 @@ var CookMateUI = {
   // ---------------------------------------------------------------
   createCategoryCard: function (category, linkBase) {
     var url = (linkBase || getBasePath()) + 'pages/categories.html?id=' + category.id;
+    var catImg = getImageUrl(category.image, getCategoryFallbackImage(category.id || category.slug));
     var html = '';
     html += '<a href="' + url + '" class="category-card">';
     html += '<div class="category-card__image">';
-    html += '<img src="' + (category.image || '') + '" alt="' + escapeHtml(category.name) + '" onerror="handleImageError(this)" loading="lazy">';
+    html += '<img src="' + escapeHtml(catImg) + '" alt="' + escapeHtml(category.name) + '" data-category-id="' + escapeHtml(String(category.id || '')) + '" onerror="handleImageError(this, \'' + escapeHtml(String(category.id || '')) + '\')" loading="lazy">';
     html += '<span class="category-card__badge"><i class="fa-solid ' + (category.icon || 'fa-utensils') + '"></i></span>';
     html += '</div>';
     html += '<div class="category-card__content">';
@@ -276,44 +316,85 @@ var CookMateUI = {
   },
 
   // ---------------------------------------------------------------
-  // Pagination
+  // Skeleton loading shimmer cards
+  // ---------------------------------------------------------------
+  createSkeletonCards: function (count) {
+    var total = Math.max(1, Number(count) || 6);
+    var html = '';
+    for (var i = 0; i < total; i++) {
+      html += '<div class="recipe-card recipe-card--skeleton" aria-hidden="true">';
+      html += '<div class="skeleton skeleton--image"></div>';
+      html += '<div class="recipe-card__content">';
+      html += '<div class="skeleton skeleton--text" style="width:38%"></div>';
+      html += '<div class="skeleton skeleton--title" style="width:86%"></div>';
+      html += '<div class="skeleton skeleton--text" style="width:94%"></div>';
+      html += '<div class="skeleton skeleton--text" style="width:62%"></div>';
+      html += '</div></div>';
+    }
+    return html;
+  },
+
+  // ---------------------------------------------------------------
+  // Windowed Pagination with Ellipsis (mobile-safe 0px overflow)
   // ---------------------------------------------------------------
   createPagination: function (currentPage, totalPages, onPageChange) {
+    totalPages = Number(totalPages) || 1;
+    currentPage = Math.max(1, Math.min(totalPages, Number(currentPage) || 1));
     if (totalPages <= 1) return '';
 
-    var html = '<div class="pagination">';
+    var html = '<nav class="pagination" aria-label="Phân trang">';
 
     // Previous button
-    html += '<button class="pagination__btn ' + (currentPage === 1 ? 'disabled' : '') + '" ';
+    html += '<button type="button" class="pagination__item pagination__prev ' + (currentPage === 1 ? 'disabled' : '') + '" ';
     if (currentPage > 1) {
       html += 'onclick="' + onPageChange + '(' + (currentPage - 1) + ')"';
     } else {
-      html += 'disabled';
+      html += 'disabled aria-disabled="true"';
     }
-    html += '><i class="fa-solid fa-chevron-left"></i></button>';
+    html += ' aria-label="Trang trước"><i class="fa-solid fa-chevron-left"></i><span class="pagination__label"> Trước</span></button>';
 
-    // Page numbers
-    for (var i = 1; i <= totalPages; i++) {
-      if (totalPages > 7 && i > 2 && i < totalPages - 1 && Math.abs(i - currentPage) > 1) {
-        if (i === 3 || i === totalPages - 2) {
-          html += '<span class="pagination__dots">...</span>';
-        }
-        continue;
+    // Compute compact sliding window of visible page numbers
+    var pages = [];
+    if (totalPages <= 7) {
+      for (var p = 1; p <= totalPages; p++) pages.push(p);
+    } else {
+      pages.push(1);
+      var winStart = Math.max(2, currentPage - 1);
+      var winEnd = Math.min(totalPages - 1, currentPage + 1);
+      if (currentPage <= 3) {
+        winStart = 2;
+        winEnd = 4;
+      } else if (currentPage >= totalPages - 2) {
+        winStart = totalPages - 3;
+        winEnd = totalPages - 1;
       }
-      html += '<button class="pagination__btn ' + (i === currentPage ? 'active' : '') + '" ';
-      html += 'onclick="' + onPageChange + '(' + i + ')">' + i + '</button>';
+      if (winStart > 2) pages.push('...');
+      for (var k = winStart; k <= winEnd; k++) pages.push(k);
+      if (winEnd < totalPages - 1) pages.push('...');
+      pages.push(totalPages);
     }
+
+    pages.forEach(function (entry) {
+      if (entry === '...') {
+        html += '<span class="pagination__ellipsis" aria-hidden="true">…</span>';
+      } else {
+        var active = entry === currentPage;
+        html += '<button type="button" class="pagination__item ' + (active ? 'active' : '') + '" '
+          + (active ? 'aria-current="page" ' : '')
+          + 'onclick="' + onPageChange + '(' + entry + ')">' + entry + '</button>';
+      }
+    });
 
     // Next button
-    html += '<button class="pagination__btn ' + (currentPage === totalPages ? 'disabled' : '') + '" ';
+    html += '<button type="button" class="pagination__item pagination__next ' + (currentPage === totalPages ? 'disabled' : '') + '" ';
     if (currentPage < totalPages) {
       html += 'onclick="' + onPageChange + '(' + (currentPage + 1) + ')"';
     } else {
-      html += 'disabled';
+      html += 'disabled aria-disabled="true"';
     }
-    html += '><i class="fa-solid fa-chevron-right"></i></button>';
+    html += ' aria-label="Trang sau"><span class="pagination__label">Sau </span><i class="fa-solid fa-chevron-right"></i></button>';
 
-    html += '</div>';
+    html += '</nav>';
     return html;
   }
 };
@@ -342,19 +423,22 @@ function toggleFavoriteFromCard(recipeId, btn) {
     CookMateUI.showToast('Vui lòng đăng nhập để thêm yêu thích', 'warning');
     return;
   }
-  var added = CookMateStorage.toggleFavorite(recipeId);
-  var icon = btn.querySelector('i');
-  if (added) {
-    btn.classList.add('is-favorite');
-    icon.className = 'fa-solid fa-heart';
-    CookMateUI.showToast('Đã thêm vào yêu thích', 'success');
-  } else {
-    btn.classList.remove('is-favorite');
-    icon.className = 'fa-regular fa-heart';
-    CookMateUI.showToast('Đã xóa khỏi yêu thích', 'info');
-  }
-  // Update badge count
-  updateFavoriteBadge();
+  btn.disabled = true;
+  CookMateStorage.toggleFavorite(recipeId).then(function (result) {
+    var icon = btn.querySelector('i');
+    if (result.added) {
+      btn.classList.add('is-favorite');
+      if (icon) icon.className = 'fa-solid fa-heart';
+      CookMateUI.showToast('Đã thêm vào yêu thích', 'success');
+    } else {
+      btn.classList.remove('is-favorite');
+      if (icon) icon.className = 'fa-regular fa-heart';
+      CookMateUI.showToast('Đã xóa khỏi yêu thích', 'info');
+    }
+    updateFavoriteBadge();
+  }).catch(function (error) {
+    CookMateUI.showToast(error.message || 'Không thể cập nhật yêu thích.', 'error');
+  }).finally(function () { btn.disabled = false; });
 }
 
 function updateFavoriteBadge() {

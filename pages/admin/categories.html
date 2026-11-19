@@ -231,7 +231,16 @@
     }
 
     function saveCategories() {
-      CookMateStorage.setCategories(currentCategories);
+      return CookMateStorage.setCategories(currentCategories).then(function(categories){
+        currentCategories=categories.map(function(c){return Object.assign({},c);});
+        renderCategoryTable();
+        return categories;
+      }).catch(function(error){
+        currentCategories=CookMateStorage.getAllCategories().map(function(c){return Object.assign({},c);});
+        renderCategoryTable();
+        if(typeof CookMateUI!=='undefined')CookMateUI.showToast(error.message||'Không thể lưu danh mục.','error');
+        return [];
+      });
     }
 
     function renderCategoryTable() {

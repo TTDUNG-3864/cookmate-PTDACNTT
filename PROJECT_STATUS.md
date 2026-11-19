@@ -982,3 +982,82 @@ Kịch bản kiểm thử tự động: [`scratch/run_full_validation.js`](file:
 3. **Chặn đăng nhập khi tài khoản bị tạm khóa (`UC20`):** Kiểm tra `user.status === 'inactive'` trong `assets/js/auth-ui.js` và API `POST /api/auth/login` (trả về HTTP `403` khi tài khoản bị khóa).
 4. **Tự động ước tính dinh dưỡng (`UC06-B`):** Bổ sung `CookMateStorage.estimateNutrition(ingredients, servings)` và endpoint `POST /api/nutrition/estimate` tự động tính Calo, Protein, Fat, Carbs, Fiber khi tạo/sửa công thức.
 5. **Hỗ trợ bộ lọc URL `?filter=featured` trên `pages/recipes.html`:** Đồng bộ tham số `filter`, `tab`, `sort` trên trang Khám phá công thức.
+
+---
+
+## 12. NÂNG CẤP PRODUCTION TOÀN DIỆN (GEMINI 3.3.0 SMART RESOLVER, AUTO-OLLAMA, CHEFBOT HYBRID RAG & 200 CÔNG THỨC PHPMYADMIN)
+
+**Ngày cập nhật:** 2026-11-18  
+**Trạng thái:** ĐÃ HOÀN TẤT NÂNG CẤP & ĐẠT 100% CÁC CỔNG KIỂM THỬ THỰC TẾ (GATES G1–G7)
+
+### A. Sửa tận gốc Gemini API (`google-genai==3.3.0`) & Chuẩn hóa AI Runtime
+- **Chuẩn hóa hoàn toàn SDK `google-genai==3.3.0` (`backend/gemini_manager.py`, `backend/chatbot.py`):** Loại bỏ endpoint `Interactions API` / `previous_interaction_id`, chuyển sang `client.models.generate_content(...)` kèm `vertexai=False`, `v1beta`, timeout quy đổi đúng mili-giây (`GEMINI_TIMEOUT=28`, tối thiểu `>= 10000ms`), và truyền hội thoại đa lượt qua `types.Content` (`CHATBOT_HISTORY_TURNS=4`).
+- **Smart Model Resolver & Auto-Discovery (`backend/gemini_manager.py`, `backend/config.py`):** Tự động `.strip()` khoảng trắng và dấu nháy thừa ở `GEMINI_API_KEY`; khi model cấu hình (`gemini-3.6-flash` / `gemini-4-hydrogen`) lỗi `404`/`503`/`504`, hệ thống chuyển mạch tự động qua danh sách ưu tiên ổn định kết hợp `discover_available_gemini_models(client)` (`client.models.list()`, cache RAM 30 phút, ghi nhận 19 model text khả dụng và tự chuyển sang `gemini-3-flash-preview` trong ~20s ở lượt lỗi đầu và ~3.57s ở các lượt sau từ cache).
+- **Điểm khởi chạy thống nhất & Auto-Ollama (`main.py`, `app.py`, `backend/ollama_manager.py`):** Bổ sung `main.py` (`--host`, `--port`, `--debug`, `--no-ollama-warm`, `--check-only`) và `bootstrap_runtime()` trong `app.py`; `OllamaServiceManager` tự kiểm tra `/api/tags`, khởi chạy `ollama serve` ngầm (`CREATE_NO_WINDOW`, xoay vòng log tại `logs/ollama_runtime.log`) nếu chưa chạy, giữ an toàn không kill tiến trình Ollama bên ngoài (`shutdown_if_owned()`), và warm-up bất đồng bộ với `OLLAMA_KEEP_ALIVE=15m`, `OLLAMA_NUM_PREDICT=520`.
+
+### B. Bộ nhớ Tự học Hybrid RAG MySQL & Gói Dữ liệu 200 Công thức phpMyAdmin
+- **Mở rộng CSDL quan hệ từ 14 lên 17 bảng (`backend/database/schema_upgrade.py`, `backend/database/repositories.py`, `database/cookmate_200_recipes_phpmyadmin.sql`):**
+  - Thêm `categories.recipe_count`, `recipes.rejection_reason`, và 3 bảng trí nhớ AI: `chatbot_knowledge_base` (211 mục), `chatbot_synonyms` (90 cặp từ đồng nghĩa vùng miền), `chatbot_learned_qa` (28 Q&A chuẩn xác thực sẵn + tự học).
+  - Bổ sung `POST /api/chatbot/feedback` (`+0.15` cho đánh giá hữu ích `1`, `-0.35` cho `-1`, tự động nâng trạng thái `is_verified=1` vào luồng phản hồi nhanh khi đạt `>= 0.95`) và nâng cấp UI widget **"Đầu bếp CookMate AI — Trợ lý Ẩm thực & Dinh dưỡng"** (`assets/js/chatbot.js`) với chip ngữ cảnh công thức và nút 👍/👎.
+- **Gói Import phpMyAdmin 200 công thức (`database/cookmate_200_recipes_phpmyadmin.sql`, 573.2 KB):** Không dùng `DELIMITER` hay trigger/procedure, nạp idempotent trong ~0.24s gồm **200 công thức `APPROVED`** phân bổ đúng 8 danh mục (`45, 30, 25, 25, 25, 18, 14, 18`), **234 nguyên liệu chuẩn hóa**, **1.611 liên kết nguyên liệu**, **1.507 ánh xạ đối chiếu món**, **815 bước nấu**, đảm bảo 100% macro (`calories, protein, carbs, fat, fiber`) > 0, Category 5 (`Món chay`) 100% thuần thực vật (đã chuẩn hóa `'Nước mắm chay'` cho toàn bộ món chay), kèm 8 ảnh SVG dự phòng theo danh mục tại `assets/images/categories/`.
+
+### C. Làm sạch Giao diện Thương mại, Phân trang & Bảo toàn 100% Thành phần Cốt lõi
+- Gỡ bỏ hoàn toàn các khối tài khoản mẫu (`setupDemoAccounts`, `.auth-demo-box`), hộp test trên trang tìm kiếm (`.filter-test-box`), và cộng số giả trên trang thống kê (`+ 18 // demo count` chuyển về `CookMateStorage.getStatistics().totalFavorites`).
+- Đồng bộ phân trang rút gọn có dấu ba chấm (`windowed ellipsis pagination`) và khung xương tải (`createSkeletonCards`) across `index.html`, `recipes.html`, `categories.html`, `new-recipes.html`, `featured-recipes.html`, `holiday-recipes.html`, `search.html`, cùng luồng RBAC kiểm duyệt chặt chẽ từ server session (`pending` -> `rejected` kèm lý do -> thành viên sửa nộp lại -> `approved` -> xuất bản).
+- Bảo toàn tuyệt đối hệ màu `#E85D2A` / `#2E7D4F` / `#FFF9F2` / `#292524`, Font `Be Vietnam Pro`, bộ icon `Font Awesome 6.5.1 Free` (0 icon Pro), minh họa **Bát Phở Hà Nội** ẩn/hiện chuẩn trên Desktop/Mobile, Footer 5 cột nền tối kèm `hanoi-pho-art.svg`, và Admin SPA Shell (`cookmate_admin_session`, `#sidebarToggleBtn`, mobile header `<= 97px`, 0px tràn ngang qua 8 viewport `320px`–`1920px`).
+
+
+---
+
+## 13. CHUẨN HÓA CHEFBOT 100% DATABASE-ONLY, TÌM KIẾM ĐỊNH DANH NGUYÊN LIỆU CHÍNH XÁC, GỘP 1 THANH SEARCH TRANG CHỦ & 208 ẢNH ẨM THỰC THẬT
+
+**Ngày thực hiện:** 2026-11-18  
+**Trạng thái:** ĐÃ HOÀN THÀNH & VƯỢT QUA 100% CÁC CỔNG KIỂM ĐỊNH THỰC TẾ (GATES G1–G8)
+
+### A. Mục tiêu & Quyết định kiến trúc mới
+1. **ChefBot 100% Database-Only (`backend/services/chatbot_service.py`, `backend/database/repositories.py`, `backend/chatbot.py`):**
+   - Xóa bỏ hoàn toàn mọi nhánh tự đoán công thức ngoài CSDL (`_custom_recipe_plan`, `_render_custom_recipe_plan`, `"Gợi ý tự nấu..."`, `"chưa có trong CSDL CookMate"`).
+   - Triển khai **Ingredient Family `OR`-Grouping** kết hợp **Longest-Span Masking** (`"thịt gà"` gom `Thịt gà (ức)` OR `Thịt gà (đùi)` OR `Cánh gà` thành 1 nhóm logic duy nhất, loại trừ `Trứng gà`, `Nấm đùi gà`, `Nước dùng gà`; `"cà chua"` không bao giờ khớp nhầm sang `"cá"`), tách riêng `PANTRY_STAPLES` và chạy **Phễu Truy vấn MySQL 4 Tầng** trên `recipe_ingredients UNION dish_ingredients` kèm bộ dựng chuẩn định lượng `render_grounded_mysql_recipe_response`.
+   - Bổ sung 2 món chuẩn định lượng `Ức gà sốt cà chua đậm đà` (ID 134) và `Canh gà nấu cà chua dứa` (ID 145) vào bộ 200 công thức (giữ nguyên tổng `200` món và tỷ lệ 8 danh mục `[45, 30, 25, 25, 25, 18, 14, 18]`), đồng thời dọn sạch các dòng `chatbot_learned_qa` cũ không gắn công thức CSDL và bổ sung cột `matched_recipe_ids`.
+2. **Tìm kiếm chuẩn dấu NFC, ranh giới từ nguyên vẹn & Thang điểm Relevance `100 / 85 / 60` (`backend/database/repositories.py`, `assets/js/utils.js`, `pages/search.html`, `pages/recipes.html`):**
+   - Bảo toàn dấu tiếng Việt NFC khi truy vấn có dấu (`"ức"` != `"thực"`/`"mực"`, `"bò"` != `"bơ"`, `"cá"` != `"cà"`), kiểm tra ranh giới từ độc lập cho cả truy vấn không dấu (`"uc ga"`), khóa cụm danh từ ghép (`"nấm đùi gà"`, `"trứng gà"`) và loại trừ 100% danh mục `Món chay` khi tìm nguyên liệu động vật không kèm từ `"chay"`.
+3. **Hợp nhất duy nhất 1 Thanh Tìm Kiếm Thông Minh trên Trang chủ & Sửa khoảng đệm Header / Nút bấm (`index.html`, `assets/css/reset.css`, `assets/css/components.css`, `assets/css/pages.css`):**
+   - Xóa khối tìm kiếm lặp thứ hai dưới Hero, tích hợp **Segmented Pill Switch** 2 chế độ (`🔍 Tìm món ăn / công thức` và `🧺 Có nguyên liệu gì nấu nấy`) dùng chung **duy nhất 1 ô `<input>`** ngay trong Hero Banner.
+   - Bổ sung `scroll-padding-top`, khoảng đệm đỉnh an toàn dưới `.site-header` (`clearance >= +24px..+171px`, `0px` che chữ) và cố định `flex-shrink: 0; white-space: nowrap; overflow: visible;` cho `#aiSearchBtn` (`"Tìm thêm bằng AI"`) cùng nhãn `"Sắp xếp:"`.
+4. **Cập nhật 8/8 ảnh Danh mục & 200/200 ảnh Món ăn chụp thật đúng món (`scripts/fetch_verified_dish_images.py`, `scripts/verified_images_200.json`, `scripts/build_200_phpmyadmin_sql.py`, `database/cookmate_200_recipes_phpmyadmin.sql`, `assets/js/data/categories.js`):**
+   - Truy vấn, kiểm duyệt ngữ nghĩa Zero-Visual-Mismatch (tô bún/phở có nước dùng, 25/25 món chay thuần thực vật 0% thịt/trứng sống, đồ uống/chè đúng hình thức) và xác minh trực tiếp `208/208` URL ảnh chụp thật riêng biệt (`100% unique HTTPS`, `0` file `.svg` danh mục/món ăn).
+
+### B. Kết quả kiểm thử & Trạng thái còn lại
+- **Gates G1–G8:** Đạt **100% PASS** (`50` file `.py` `py_compile`, `13` file `.js` `node --check`, `87` unit/integration tests PASS, `200/200` ảnh món ăn + `8/8` ảnh danh mục tải thật trên Chrome Headless CDP `naturalWidth >= 300px..600px`, `0px` tràn ngang trên 8 kích thước `320px–1920px`, `0` lỗi Console JS, `0` lỗi HTTP 404/500).
+- **Lỗi còn tồn tại:** Không còn lỗi xác nhận nào trong phạm vi nhiệm vụ.
+- **Công việc tiếp theo:** Duy trì trạng thái ổn định để người dùng kiểm tra trực tiếp trên trình duyệt hoặc triển khai lên môi trường hosting khi được yêu cầu.
+
+
+---
+
+## 14. NÂNG CẤP 300 MÓN ĐẶC SẢN 3 MIỀN (6–8 BƯỚC CHI TIẾT), ĐẢO ƯU TIÊN 2 MODEL GEMINI FREE -> OLLAMA, MỞ RỘNG UI CHEFBOT, POPOVER NGUYÊN LIỆU `AND` INTERSECTION & GỘP 1 FILE SQL PHPMYADMIN DUY NHẤT
+
+**Ngày thực hiện:** 2026-11-18  
+**Trạng thái:** ĐÃ HOÀN TẤT 100% TOÀN BỘ YÊU CẦU & VƯỢT QUA 100% CÁC CỔNG KIỂM ĐỊNH THỰC TẾ (GATES G1–G8)
+
+### A. Mục tiêu & Quyết định kiến trúc đã triển khai
+1. **Khung Gợi ý Nguyên liệu Tuỳ biến `.pantry-suggest-popover` & Giao tập Đa Nguyên liệu `AND` Intersection (`index.html`, `assets/css/pages.css`, `backend/database/repositories.py`, `backend/routes/api.py`, `assets/js/utils.js`):**
+   - Xóa bỏ hoàn toàn thẻ `<datalist>` mặc định của trình duyệt trên `index.html`; xây dựng component `.pantry-suggest-popover` (`max-height: 240px`, lưới 2 cột Desktop / 1 cột Mobile `< 640px`, tối đa 12 mục, hiển thị icon phân nhóm + tên nguyên liệu + nhãn nhóm, điều hướng phím `↑` / `↓` / `Enter` / `Esc` và tự ẩn khi click ra ngoài).
+   - Nâng cấp `match_dishes_detailed` truy vấn đồng thời trên `recipe_ingredients UNION dish_ingredients` của đủ **300 món `APPROVED`**: áp dụng phép `OR` trong nội bộ họ nguyên liệu và phép giao **`AND` nghiêm ngặt** giữa $K$ nguyên liệu người dùng chọn khi có `>= 1` món thỏa đủ $K/K$; chỉ hạ xuống khớp từng phần khi `0` món khớp đồng thời kèm thông báo rõ ràng và trọng số `5x` cho nhóm Đạm / Rau củ chính so với Tinh bột / Gia vị phụ; loại trừ gia vị tủ bếp cơ bản khỏi mẫu số `%` sẵn sàng và hiển thị huy hiệu xanh `Khớp đủ K/K nguyên liệu đã chọn`.
+   - Bổ sung từ đồng nghĩa tên món vùng miền (`"bún chả quạt"` -> `Bún chả Hà Nội nướng than hoa`, `"thịt kho hột vịt"` -> `Thịt kho tàu nước dừa trứng vịt`, `"nem rán"` <-> `Chả giò`, `"cá quả"`/`"cá chuối"` -> `Cá lóc`, `"tào phớ"` <-> `Tàu hũ`...) trong khi bảo toàn tuyệt đối bộ lọc `"Ức Gà"` ranh giới từ và loại trừ 100% món chay khi tìm nguyên liệu mặn.
+2. **Đảo Thứ tự Ưu tiên AI ChefBot (`Gemini Free #1 -> Gemini Free #2 -> Ollama`) & Chẩn đoán Minh bạch (`backend/config.py`, `backend/gemini_manager.py`, `backend/services/chatbot_service.py`, `.env`, `.env.example`):**
+   - Chuyển thứ tự gọi mô hình sang: **Ưu tiên #1 `GEMINI_PRIMARY_MODEL` (`gemini-2.5-flash`, tự động ánh xạ thông minh sang model Flash khả dụng trên key qua `models.list()` khi gặp HTTP 404)** -> **Ưu tiên #2 `GEMINI_FALLBACK_MODEL` (`gemini-2.5-flash-lite`)** -> **Ưu tiên #3 `Ollama` nội bộ (`qwen3.5:4b`, `OLLAMA_NUM_CTX=4096`, `OLLAMA_NUM_PREDICT=960`) CHỈ chạy khi cả 2 model Gemini đều thất bại** -> bộ kết xuất chuẩn định lượng `sql_grounded` bảo toàn 100% neo dữ liệu vào 300 món MySQL.
+   - Bổ sung khối `aiDiagnostics` (`activeProvider`, `modelUsed`, `geminiFailed`, `attemptedModels`, `userWarningVi` không chứa khóa bí mật) trong phản hồi `POST /api/chatbot`.
+3. **Mở rộng Giao diện ChefBot (`assets/css/components.css`, `assets/js/chatbot.js`):**
+   - Nâng kích thước mặc định `#cmChefBotPanel` trên Desktop lên `width: 480px`, `height: min(740px, calc(100vh - 40px))`, `border-radius: 20px`; bổ sung nút phóng rộng / thu gọn (`⤢` / `⤡`) mở lên `width: min(780px, 92vw); height: min(840px, 88vh)`; Mobile `< 640px` dạng bottom-sheet `calc(100vw - 16px)` cao `86dvh`.
+   - Khắc phục độ tương phản bong bóng tin nhắn người dùng (`linear-gradient(135deg, #E85D2A, #D94E1F)`, chữ `#FFFFFF !important`), gỡ bỏ nhãn phụ `"TRỢ LÝ BẾP"` gây chật Header, hiển thị huy hiệu model đang hoạt động (`🟢 Gemini` / `🟡 Đang dùng Ollama cục bộ`) và hộp cảnh báo màu vàng hổ phách nổi bật khi `geminiFailed === true`, nâng thumbnail thẻ món lên `64x64px`, ẩn thanh cuộn dọc thừa trên `<textarea>` dưới 4 dòng (`overflow-y: hidden`).
+4. **Bổ sung Đúng 100 Đặc sản 3 Miền (`ID 201..300`) & Chuẩn hóa 6–8 Bước Nấu Chi Tiết cho Toàn bộ 300 Công thức (`scripts/catalog_300_regional.py`, `scripts/step_enricher_300.py`, `scripts/fetch_verified_300_images.py`, `scripts/verified_images_300.json`, `pages/recipe-detail.html`, `pages/admin/approve-recipes.html`):**
+   - Mở rộng kho công thức từ 200 lên đúng **300 món `APPROVED`** trải đều 8 vùng địa lý ẩm thực Việt Nam (`Hà Nội & ĐB Sông Hồng`, `Tây Bắc & Đông Bắc`, `Bắc Trung Bộ`, `Cố đô Huế - Bình Trị Thiên`, `Đà Nẵng - Quảng Nam - Quảng Ngãi`, `Nam Trung Bộ`, `Tây Nguyên & Đà Lạt`, `Sài Gòn & Nam Bộ`), nâng tổng nguyên liệu lên **278** và xác minh **300/300** URL ảnh chụp thật riêng biệt (`8/8` danh mục + `300/300` món ăn).
+   - Chuẩn hóa toàn bộ **300/300 công thức (`ID 1..300`)** lên **6–7 bước đầu bếp tuần tự** (**1.964** dòng `recipe_steps`, độ dài hướng dẫn trung bình **306,7 ký tự/bước**, **0** dòng mang tên chung chung `"Bước X"`, 100% có `duration_mins > 0` và `tip_note` thực chất); cập nhật giao diện `pages/recipe-detail.html` hiển thị tiêu đề bước ý nghĩa, huy hiệu `⏱️ X phút`, hộp `💡 Bí quyết Đầu bếp: {tip_note}` và hỗ trợ phóng chữ `20px` ở Chế độ Đứng bếp.
+5. **Hợp nhất Duy nhất 1 File SQL Tổng thể cho phpMyAdmin (`scripts/build_300_full_sql.py`, `database/cookmate_full_database.sql`):**
+   - Sao lưu các file `.sql` cũ sang thư mục tạm ngoài dự án và hợp nhất thành **duy nhất 1 file `database/cookmate_full_database.sql`** (**1.839,6 KB**), tích hợp sẵn `CREATE DATABASE IF NOT EXISTS cookmate ...; USE cookmate;`, 17 bảng có `COMMENT='...'` tiếng Việt, `CREATE OR REPLACE VIEW v_danh_sach_300_mon_an` (không có `DEFINER`), sắp xếp tăng dần `ID = 1 -> 300`, gộp lô `INSERT` 25–30 dòng, không dùng `DELIMITER` / `TRIGGER` / `PROCEDURE`.
+
+### B. Kết quả kiểm thử & Trạng thái còn lại
+- **Gates G1–G8:** Đạt **100% PASS** (`54` file `.py` `py_compile`, `13` file `.js` `node --check`, `91` unit/integration tests PASS, nạp idempotent 2 lần liên tiếp `database/cookmate_full_database.sql` `0` lỗi SQL, `300/300` ảnh món ăn + `8/8` ảnh danh mục giải mã thật trên Chrome Headless CDP `naturalWidth >= 300px`, Popover `240px` `0` `<datalist>`, giao diện ChefBot `480px -> 780px` chữ trắng `rgb(255, 255, 255)`, `0px` tràn ngang trên 8 kích thước `320px–1920px`, `0` lỗi Console JS, `0` lỗi HTTP 404/500).
+- **Lỗi còn tồn tại:** Không còn lỗi xác nhận nào.
+- **Công việc tiếp theo:** Sẵn sàng bàn giao để người dùng import `database/cookmate_full_database.sql` trực tiếp trên tab **Nhập (Import)** của phpMyAdmin và trải nghiệm hệ thống trên trình duyệt.

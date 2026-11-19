@@ -97,21 +97,60 @@
           <div class="form-section-header">
             <div class="form-section-icon"><i class="fa-solid fa-image"></i></div>
             <div>
-              <h2 class="form-section-title recipe-form__section-title">2. Hình ảnh & Khẩu phần</h2>
-              <p class="form-section-desc">Hình ảnh bắt mắt và số khẩu phần gốc làm căn cứ co giãn tự động</p>
+              <h2 class="form-section-title recipe-form__section-title">2. Hình ảnh & Khẩu phần <span class="required text-danger">*</span></h2>
+              <p class="form-section-desc">Tải ảnh từ thiết bị hoặc nhập URL hình ảnh món ăn (chỉ cần chọn 1 trong 2 phương thức)</p>
             </div>
           </div>
 
           <div class="form-grid-2">
             <div>
-              <div class="form-group mb-2">
-                <label for="recipeImage" class="form-label font-bold">URL Hình ảnh món ăn</label>
-                <input type="text" id="recipeImage" class="form-input" placeholder="https://images.unsplash.com/photo-...">
-                <div class="text-xs text-secondary mt-1">Dán liên kết ảnh trực tiếp (JPG, PNG, WebP) để hiển thị sắc nét</div>
+              <!-- Phương thức A: Tải ảnh từ thiết bị -->
+              <div class="form-group mb-3" id="uploadImageMethodBox">
+                <label class="form-label font-bold">Phương thức A: Tải ảnh từ thiết bị</label>
+                <input type="file" id="recipeImageFile" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" style="display:none;">
+                <div id="imageDropzone" class="recipe-upload-dropzone" style="border: 2px dashed rgba(232, 93, 42, 0.35); border-radius: 12px; padding: 16px; text-align: center; background: #FFFDF9; transition: all 0.2s ease;">
+                  <div style="font-size: 26px; color: #E85D2A; margin-bottom: 6px;">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                  </div>
+                  <button type="button" class="btn btn-outline btn-sm" id="chooseImageFileBtn">
+                    <i class="fa-solid fa-upload"></i> Chọn ảnh từ thiết bị
+                  </button>
+                  <div class="text-xs text-secondary mt-2">Kéo thả ảnh vào đây hoặc nhấn để chọn file (JPG, JPEG, PNG, WebP • tối đa 5 MB)</div>
+                </div>
+
+                <div id="selectedFileInfo" style="display:none; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #F0FDF4; border: 1px solid #BBF7D0;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                    <div style="min-width:0; flex:1;">
+                      <div class="text-xs font-bold" style="color:#166534; word-break:break-all;">
+                        <i class="fa-solid fa-file-image"></i> <span id="selectedFileName"></span>
+                      </div>
+                      <div class="text-xs text-secondary" id="selectedFileSize"></div>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                      <button type="button" class="btn btn-ghost btn-sm" id="changeImageFileBtn" style="padding:4px 10px; font-size:12px;">
+                        <i class="fa-solid fa-rotate"></i> Thay ảnh
+                      </button>
+                      <button type="button" class="btn btn-ghost btn-sm text-danger" id="clearImageFileBtn" style="padding:4px 10px; font-size:12px;">
+                        <i class="fa-solid fa-trash-can"></i> Xóa ảnh đã chọn
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div class="recipe-image-preview-card" id="imagePreview" style="display: none;">
-                <img id="imagePreviewImg" src="" alt="Xem trước ảnh món ăn" onerror="this.parentElement.style.display='none'">
+              <div class="text-xs font-bold text-secondary text-center my-2">— HOẶC —</div>
+
+              <!-- Phương thức B: Nhập URL -->
+              <div class="form-group mb-2" id="urlImageMethodBox">
+                <label for="recipeImage" class="form-label font-bold">Phương thức B: URL Hình ảnh món ăn</label>
+                <input type="text" id="recipeImage" class="form-input" placeholder="https://images.unsplash.com/photo-...">
+                <div class="text-xs text-secondary mt-1">Dán liên kết ảnh trực tiếp (JPG, PNG, WebP) nếu không tải ảnh từ máy</div>
+              </div>
+
+              <div class="form-error" id="recipeImageError" style="display:none; color:#DC2626; font-size:12.5px; margin-top:6px;"></div>
+
+              <div class="recipe-image-preview-card mt-3" id="imagePreview" style="display: none;">
+                <img id="imagePreviewImg" src="" alt="Xem trước ảnh món ăn">
               </div>
             </div>
 
@@ -181,24 +220,16 @@
             <div class="form-section-icon"><i class="fa-solid fa-circle-check"></i></div>
             <div>
               <h2 class="form-section-title recipe-form__section-title">5. Kiểm tra & Gửi duyệt</h2>
-              <p class="form-section-desc">Rà soát lại thông tin trước khi chuyển vào hệ thống CookMate</p>
-            </div>
-          </div>
-
-          <div class="recipe-submit-notice">
-            <div class="recipe-submit-notice__icon"><i class="fa-solid fa-shield-halved"></i></div>
-            <div class="recipe-submit-notice__content">
-              <strong>Quy trình kiểm duyệt công thức:</strong>
-              <p>Để đảm bảo món ăn chuẩn định lượng và hữu ích cho cộng đồng, bài viết của bạn sẽ được chuyển vào hàng đợi kiểm duyệt của Ban Quản Trị trước khi xuất bản công khai trên website CookMate.</p>
+              <p class="form-section-desc">Hoàn tất và gửi công thức của bạn</p>
             </div>
           </div>
 
           <div class="form-submit-actions">
             <button type="submit" class="btn btn-primary btn-lg" id="submitRecipeBtn">
-              <i class="fa-solid fa-paper-plane"></i> <span>Gửi công thức chờ duyệt</span>
+              <i class="fa-solid fa-paper-plane"></i> <span>Gửi công thức</span>
             </button>
-            <a href="my-recipes.html" class="btn btn-ghost btn-lg">
-              <i class="fa-solid fa-arrow-left"></i> <span>Hủy & Quay lại</span>
+            <a href="my-recipes.html" class="btn btn-ghost btn-lg" id="cancelRecipeBtn">
+              <i class="fa-solid fa-arrow-left"></i> <span>Hủy / Quay lại</span>
             </a>
           </div>
         </div>
@@ -225,6 +256,30 @@
     var editRecipeId = null;
     var ingredientIndex = 0;
     var stepIndex = 0;
+    var selectedImageFile = null;
+    var objectPreviewUrl = null;
+    var urlImageLoadError = false;
+    var MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+    var ALLOWED_IMAGE_EXT_RE = /\.(jpg|jpeg|png|webp)$/i;
+    var ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+
+    function formatFileBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function showImageError(msg) {
+      var errEl = document.getElementById('recipeImageError');
+      if (!errEl) return;
+      if (msg) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+      } else {
+        errEl.textContent = '';
+        errEl.style.display = 'none';
+      }
+    }
 
     document.addEventListener('DOMContentLoaded', function() {
       if (typeof CookMateStorage === 'undefined' || !CookMateStorage.isLoggedIn()) {
@@ -248,7 +303,7 @@
         isEditMode = true;
         editRecipeId = recipeId;
         document.getElementById('formPageTitle').innerHTML = '<i class="fas fa-edit"></i> Chỉnh sửa công thức';
-        document.getElementById('submitRecipeBtn').innerHTML = '<i class="fas fa-save"></i> Lưu thay đổi';
+        document.getElementById('submitRecipeBtn').innerHTML = '<i class="fas fa-save"></i> <span>Gửi công thức</span>';
         document.title = 'Chỉnh sửa công thức | CookMate';
         loadRecipeForEdit(recipeId);
       } else {
@@ -274,7 +329,7 @@
 
     function populateCategories() {
       var select = document.getElementById('recipeCategory');
-      var cats = typeof CATEGORIES !== 'undefined' ? CATEGORIES : [];
+      var cats = CookMateStorage.getAllCategories ? CookMateStorage.getAllCategories() : (typeof CATEGORIES !== 'undefined' ? CATEGORIES : []);
       cats.forEach(function(cat) {
         var option = document.createElement('option');
         option.value = cat.id || cat.slug || cat.name;
@@ -283,18 +338,169 @@
       });
     }
 
+    function clearSelectedFile(hidePreview) {
+      selectedImageFile = null;
+      var fileInput = document.getElementById('recipeImageFile');
+      if (fileInput) fileInput.value = '';
+      var infoBox = document.getElementById('selectedFileInfo');
+      if (infoBox) infoBox.style.display = 'none';
+      if (objectPreviewUrl) {
+        try { URL.revokeObjectURL(objectPreviewUrl); } catch (e) {}
+        objectPreviewUrl = null;
+      }
+      if (hidePreview) {
+        var preview = document.getElementById('imagePreview');
+        var img = document.getElementById('imagePreviewImg');
+        if (preview) preview.style.display = 'none';
+        if (img) img.removeAttribute('src');
+      }
+    }
+
+    function handleSelectedImageFile(file) {
+      if (!file) return;
+      showImageError('');
+      urlImageLoadError = false;
+
+      var fileName = String(file.name || '');
+      var mime = String(file.type || '').toLowerCase();
+      var validExt = ALLOWED_IMAGE_EXT_RE.test(fileName);
+      var validMime = !mime || ALLOWED_IMAGE_MIMES.indexOf(mime) !== -1;
+
+      if (!validExt || !validMime) {
+        clearSelectedFile(true);
+        showImageError('Định dạng ảnh không hợp lệ. Vui lòng chọn file JPG, JPEG, PNG hoặc WebP.');
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        clearSelectedFile(true);
+        showImageError('Dung lượng ảnh vượt quá giới hạn tối đa 5 MB.');
+        return;
+      }
+
+      // Mutually exclusive: choosing a file clears the URL input
+      var urlInput = document.getElementById('recipeImage');
+      if (urlInput) urlInput.value = '';
+
+      if (objectPreviewUrl) {
+        try { URL.revokeObjectURL(objectPreviewUrl); } catch (e) {}
+      }
+      selectedImageFile = file;
+      objectPreviewUrl = URL.createObjectURL(file);
+
+      var nameEl = document.getElementById('selectedFileName');
+      var sizeEl = document.getElementById('selectedFileSize');
+      var infoBox = document.getElementById('selectedFileInfo');
+      if (nameEl) nameEl.textContent = file.name;
+      if (sizeEl) sizeEl.textContent = 'Dung lượng: ' + formatFileBytes(file.size);
+      if (infoBox) infoBox.style.display = 'block';
+
+      var preview = document.getElementById('imagePreview');
+      var img = document.getElementById('imagePreviewImg');
+      if (img && preview) {
+        img.onload = function() {
+          preview.style.display = 'block';
+        };
+        img.onerror = function() {
+          preview.style.display = 'none';
+          clearSelectedFile(false);
+          showImageError('File đã chọn không phải hình ảnh hợp lệ.');
+        };
+        img.src = objectPreviewUrl;
+        preview.style.display = 'block';
+      }
+    }
+
     function setupImagePreview() {
       var input = document.getElementById('recipeImage');
+      var fileInput = document.getElementById('recipeImageFile');
+      var chooseBtn = document.getElementById('chooseImageFileBtn');
+      var changeBtn = document.getElementById('changeImageFileBtn');
+      var clearBtn = document.getElementById('clearImageFileBtn');
+      var dropzone = document.getElementById('imageDropzone');
       var preview = document.getElementById('imagePreview');
       var img = document.getElementById('imagePreviewImg');
 
+      if (chooseBtn && fileInput) {
+        chooseBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          fileInput.click();
+        });
+      }
+      if (changeBtn && fileInput) {
+        changeBtn.addEventListener('click', function() {
+          fileInput.click();
+        });
+      }
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+          clearSelectedFile(true);
+          showImageError('');
+        });
+      }
+      if (fileInput) {
+        fileInput.addEventListener('change', function() {
+          if (fileInput.files && fileInput.files[0]) {
+            handleSelectedImageFile(fileInput.files[0]);
+          }
+        });
+      }
+      if (dropzone && fileInput) {
+        dropzone.addEventListener('click', function(e) {
+          if (e.target && e.target.id === 'chooseImageFileBtn') return;
+          fileInput.click();
+        });
+        dropzone.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          dropzone.style.borderColor = '#E85D2A';
+          dropzone.style.background = '#FFF7ED';
+        });
+        dropzone.addEventListener('dragleave', function(e) {
+          e.preventDefault();
+          dropzone.style.borderColor = 'rgba(232, 93, 42, 0.35)';
+          dropzone.style.background = '#FFFDF9';
+        });
+        dropzone.addEventListener('drop', function(e) {
+          e.preventDefault();
+          dropzone.style.borderColor = 'rgba(232, 93, 42, 0.35)';
+          dropzone.style.background = '#FFFDF9';
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleSelectedImageFile(e.dataTransfer.files[0]);
+          }
+        });
+      }
+
       input.addEventListener('input', function() {
         var url = input.value.trim();
+        showImageError('');
+        urlImageLoadError = false;
         if (url) {
-          img.src = url;
+          // Mutually exclusive: typing a URL clears any selected file
+          clearSelectedFile(false);
+          if (!/^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(url) && !/^\/?static\/uploads\/recipes\//i.test(url)) {
+            preview.style.display = 'none';
+            urlImageLoadError = true;
+            showImageError('URL hình ảnh không đúng định dạng (cần bắt đầu bằng http:// hoặc https://).');
+            return;
+          }
+          img.onload = function() {
+            urlImageLoadError = false;
+            showImageError('');
+            preview.style.display = 'block';
+          };
+          img.onerror = function() {
+            if (input.value.trim() === url) {
+              preview.style.display = 'none';
+              urlImageLoadError = true;
+              showImageError('Không thể tải ảnh từ URL đã nhập. Vui lòng kiểm tra lại liên kết ảnh.');
+            }
+          };
+          img.src = typeof getImageUrl === 'function' ? getImageUrl(url) : url;
           preview.style.display = 'block';
         } else {
-          preview.style.display = 'none';
+          if (!selectedImageFile) {
+            preview.style.display = 'none';
+            img.removeAttribute('src');
+          }
         }
       });
     }
@@ -478,6 +684,15 @@
         hasError = true;
       }
 
+      /* Validate image (Method A file OR Method B URL; never fallback to default image) */
+      if (!selectedImageFile && !imageUrl) {
+        showImageError('Vui lòng cung cấp URL ảnh hoặc tải ảnh từ thiết bị.');
+        hasError = true;
+      } else if (!selectedImageFile && urlImageLoadError) {
+        showImageError('URL hình ảnh không hợp lệ hoặc không thể tải ảnh.');
+        hasError = true;
+      }
+
       /* Collect ingredients */
       var ingredients = [];
       var ingredientRows = document.querySelectorAll('#ingredientsList .ingredient-row');
@@ -544,8 +759,9 @@
         categoryId: parsedCatId,
         category: parsedCatId,
         occasion: occasion || null,
-        image: imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg',
-        imageUrl: imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg',
+        image: selectedImageFile ? '' : imageUrl,
+        imageUrl: selectedImageFile ? '' : imageUrl,
+        imageFile: selectedImageFile || null,
         prepTime: prepTime,
         cookTime: cookTime,
         difficulty: difficulty,
@@ -560,56 +776,21 @@
       };
 
       if (isEditMode && editRecipeId) {
-        /* Update existing recipe */
-        recipeData.id = editRecipeId;
-        var existing = CookMateStorage.getRecipeById ? CookMateStorage.getRecipeById(editRecipeId, true) : null;
-        var wasRejected = existing && existing.status === 'rejected';
-        if (wasRejected) {
-          recipeData.resubmit = true;
-        }
-
-        CookMateStorage.updateRecipe(editRecipeId, recipeData, currentUser);
-
-        if (wasRejected) {
-          if (typeof CookMateUI !== 'undefined') {
-            CookMateUI.showToast('Công thức đã được gửi lại và đang chờ Admin duyệt!', 'success');
-          }
-          setTimeout(function() {
-            window.location.href = 'my-recipes.html?tab=pending';
-          }, 800);
-        } else {
-          if (typeof CookMateUI !== 'undefined') {
-            CookMateUI.showToast('Cập nhật công thức thành công!', 'success');
-          }
-          setTimeout(function() {
-            window.location.href = 'my-recipes.html';
-          }, 800);
-        }
+        CookMateStorage.updateRecipe(editRecipeId,recipeData,currentUser).then(function(){
+          if(typeof CookMateUI!=='undefined')CookMateUI.showToast('Công thức đã cập nhật và được gửi lại để Admin duyệt.','success');
+          setTimeout(function(){window.location.href='my-recipes.html?tab=pending';},800);
+        }).catch(function(error){
+          if(typeof CookMateUI!=='undefined')CookMateUI.showToast(error.message||'Không thể cập nhật công thức.','error');
+          if(submitBtn){submitBtn.disabled=false;submitBtn.innerHTML='<i class="fa-solid fa-paper-plane"></i> <span>Gửi công thức</span>';}
+        });
       } else {
-        /* Add new recipe */
-        recipeData.id = Date.now();
-        recipeData.createdAt = new Date().toISOString();
-        recipeData.ratings = [];
-        recipeData.comments = [];
-        recipeData.averageRating = 0;
-
-        CookMateStorage.addRecipe(recipeData, currentUser);
-
-        if (currentUser.role === 'admin') {
-          if (typeof CookMateUI !== 'undefined') {
-            CookMateUI.showToast('Công thức đã được xuất bản công khai ngay!', 'success');
-          }
-          setTimeout(function() {
-            window.location.href = 'my-recipes.html?tab=approved';
-          }, 800);
-        } else {
-          if (typeof CookMateUI !== 'undefined') {
-            CookMateUI.showToast('Công thức của bạn đã được gửi và đang chờ Admin duyệt!', 'success');
-          }
-          setTimeout(function() {
-            window.location.href = 'my-recipes.html?tab=pending';
-          }, 800);
-        }
+        CookMateStorage.addRecipe(recipeData).then(function(){
+          if(typeof CookMateUI!=='undefined')CookMateUI.showToast('Công thức đã được gửi và đang chờ Admin duyệt.','success');
+          setTimeout(function(){window.location.href='my-recipes.html?tab=pending';},800);
+        }).catch(function(error){
+          if(typeof CookMateUI!=='undefined')CookMateUI.showToast(error.message||'Không thể gửi công thức.','error');
+          if(submitBtn){submitBtn.disabled=false;submitBtn.innerHTML='<i class="fa-solid fa-paper-plane"></i> <span>Gửi công thức</span>';}
+        });
       }
     }
   </script>

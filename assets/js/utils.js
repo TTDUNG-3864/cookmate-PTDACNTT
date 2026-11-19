@@ -71,19 +71,60 @@ function formatNumber(num) {
   return num.toString();
 }
 
+function parseUtcDate(dateStr) {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
+  var raw = String(dateStr).trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(raw)) {
+    raw = raw.replace(' ', 'T') + 'Z';
+  }
+  var d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function formatDate(dateStr) {
-  var d = new Date(dateStr);
-  return d.toLocaleDateString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
+  var d = parseUtcDate(dateStr);
+  if (!d) return '';
+  try {
+    return d.toLocaleDateString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch (e) {
+    return d.toLocaleDateString('vi-VN');
+  }
+}
+
+function formatDateTimeVN(dateStr) {
+  var d = parseUtcDate(dateStr);
+  if (!d) return 'Chưa cập nhật';
+  try {
+    var parts = new Intl.DateTimeFormat('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(d);
+    var map = {};
+    parts.forEach(function (p) { map[p.type] = p.value; });
+    if (map.day && map.month && map.year && map.hour && map.minute) {
+      return map.day + '/' + map.month + '/' + map.year + ' ' + map.hour + ':' + map.minute;
+    }
+  } catch (e) {}
+  return formatDate(dateStr);
 }
 
 function timeAgo(dateStr) {
+  var date = parseUtcDate(dateStr);
+  if (!date) return 'Vừa xong';
   var now = new Date();
-  var date = new Date(dateStr);
-  var diff = Math.floor((now - date) / 1000);
+  var diff = Math.floor((now.getTime() - date.getTime()) / 1000);
   if (diff < 60) return 'Vừa xong';
   if (diff < 3600) return Math.floor(diff / 60) + ' phút trước';
   if (diff < 86400) return Math.floor(diff / 3600) + ' giờ trước';
@@ -138,7 +179,7 @@ function validateEmail(email) {
 
 function validatePassword(password) {
   if (!isNotEmpty(password)) return 'Mật khẩu không được để trống';
-  if (password.length < 6) return 'Mật khẩu phải có ít nhất 6 ký tự';
+  if (password.length < 8) return 'Mật khẩu phải có ít nhất 8 ký tự';
   return null;
 }
 
@@ -147,14 +188,73 @@ function validatePasswordMatch(password, confirm) {
   return null;
 }
 
-// ===== Image Utilities =====
-function getImageUrl(url, fallback) {
-  return url || fallback || 'assets/images/placeholders/recipe-placeholder.svg';
+// ===== Image Utilities (Real High-Resolution Food Photography, 0 SVG Category Fallbacks) =====
+var CATEGORY_PHOTO_MAP = {
+  '1': 'https://www.cet.edu.vn/wp-content/uploads/2018/03/thit-kho-tau-trung-cut.jpg',
+  'mon-chinh': 'https://www.cet.edu.vn/wp-content/uploads/2018/03/thit-kho-tau-trung-cut.jpg',
+  'mon-chinh.svg': 'https://www.cet.edu.vn/wp-content/uploads/2018/03/thit-kho-tau-trung-cut.jpg',
+  '2': 'https://cdn2.fptshop.com.vn/unsafe/2024_3_23_638467922672032197_batch_cach-nau-canh-chua-ca-loc.jpg',
+  'mon-canh-sup': 'https://cdn2.fptshop.com.vn/unsafe/2024_3_23_638467922672032197_batch_cach-nau-canh-chua-ca-loc.jpg',
+  'canh-sup': 'https://cdn2.fptshop.com.vn/unsafe/2024_3_23_638467922672032197_batch_cach-nau-canh-chua-ca-loc.jpg',
+  'canh-sup.svg': 'https://cdn2.fptshop.com.vn/unsafe/2024_3_23_638467922672032197_batch_cach-nau-canh-chua-ca-loc.jpg',
+  '3': 'https://cdn2.fptshop.com.vn/unsafe/thit_bo_xao_thap_cam_2_7bb704dd0b.png',
+  'mon-xao': 'https://cdn2.fptshop.com.vn/unsafe/thit_bo_xao_thap_cam_2_7bb704dd0b.png',
+  'mon-xao.svg': 'https://cdn2.fptshop.com.vn/unsafe/thit_bo_xao_thap_cam_2_7bb704dd0b.png',
+  '4': 'https://www.huongnghiepaau.com/wp-content/uploads/2018/06/ga-nuong-mat-ong.jpg',
+  'mon-nuong-chien': 'https://www.huongnghiepaau.com/wp-content/uploads/2018/06/ga-nuong-mat-ong.jpg',
+  'mon-nuong-chien.svg': 'https://www.huongnghiepaau.com/wp-content/uploads/2018/06/ga-nuong-mat-ong.jpg',
+  '5': 'https://cdn.tgdd.vn/2024/01/CookRecipe/GalleryStep/thanh-pham-44.jpg',
+  'mon-chay': 'https://cdn.tgdd.vn/2024/01/CookRecipe/GalleryStep/thanh-pham-44.jpg',
+  'mon-chay.svg': 'https://cdn.tgdd.vn/2024/01/CookRecipe/GalleryStep/thanh-pham-44.jpg',
+  '6': 'https://www.lorca.vn/wp-content/uploads/2022/11/maxresdefault-8.jpg',
+  'mon-trang-mieng': 'https://www.lorca.vn/wp-content/uploads/2022/11/maxresdefault-8.jpg',
+  'trang-mieng-banh': 'https://www.lorca.vn/wp-content/uploads/2022/11/maxresdefault-8.jpg',
+  'trang-mieng-banh.svg': 'https://www.lorca.vn/wp-content/uploads/2022/11/maxresdefault-8.jpg',
+  '7': 'https://cdn2.fptshop.com.vn/unsafe/640x0/filters:format(webp):quality(75)/cach_lam_tra_dao_cam_sa_2313d177e5.jpg',
+  'do-uong': 'https://cdn2.fptshop.com.vn/unsafe/640x0/filters:format(webp):quality(75)/cach_lam_tra_dao_cam_sa_2313d177e5.jpg',
+  'do-uong-sinh-to': 'https://cdn2.fptshop.com.vn/unsafe/640x0/filters:format(webp):quality(75)/cach_lam_tra_dao_cam_sa_2313d177e5.jpg',
+  'do-uong-sinh-to.svg': 'https://cdn2.fptshop.com.vn/unsafe/640x0/filters:format(webp):quality(75)/cach_lam_tra_dao_cam_sa_2313d177e5.jpg',
+  '8': 'https://www.cet.edu.vn/wp-content/uploads/2018/11/goi-cuon-tom-thit.jpg',
+  'mon-khai-vi': 'https://www.cet.edu.vn/wp-content/uploads/2018/11/goi-cuon-tom-thit.jpg',
+  'khai-vi-goi-cuon': 'https://www.cet.edu.vn/wp-content/uploads/2018/11/goi-cuon-tom-thit.jpg',
+  'khai-vi-goi-cuon.svg': 'https://www.cet.edu.vn/wp-content/uploads/2018/11/goi-cuon-tom-thit.jpg'
+};
+
+function getCategoryFallbackImage(categoryHint) {
+  var key = String(categoryHint || '').trim().toLowerCase();
+  if (CATEGORY_PHOTO_MAP[key]) return CATEGORY_PHOTO_MAP[key];
+  return CATEGORY_PHOTO_MAP['1'];
 }
 
-function handleImageError(img) {
-  img.onerror = null;
-  img.src = getPlaceholderUrl(img.alt || 'Ảnh món ăn');
+function getImageUrl(url, fallback) {
+  if (!url) return fallback || getCategoryFallbackImage('1');
+  if (typeof url === 'string') {
+    var trimmed = url.trim();
+    if (trimmed.toLowerCase().indexOf('categories/') !== -1 && trimmed.toLowerCase().slice(-4) === '.svg') {
+      var baseName = trimmed.split('/').pop().toLowerCase();
+      return CATEGORY_PHOTO_MAP[baseName] || fallback || getCategoryFallbackImage('1');
+    }
+    if (trimmed.indexOf('assets/') === 0) return getBasePath() + trimmed;
+    if (trimmed.indexOf('static/') === 0) return '/' + trimmed;
+    if (trimmed.indexOf('/static/') === 0) return trimmed;
+  }
+  return url;
+}
+
+function handleImageError(img, categoryHint) {
+  if (!img) return;
+  if (img.dataset && img.dataset.fallbackApplied === '1') {
+    img.onerror = null;
+    img.src = getPlaceholderUrl(img.alt || 'Món ăn CookMate');
+    return;
+  }
+  if (img.dataset) img.dataset.fallbackApplied = '1';
+  var hint = categoryHint || img.getAttribute('data-category-id') || '';
+  img.onerror = function () {
+    img.onerror = null;
+    img.src = getPlaceholderUrl(img.alt || 'Món ăn CookMate');
+  };
+  img.src = getCategoryFallbackImage(hint);
 }
 
 function getPlaceholderUrl(text) {
@@ -260,63 +360,347 @@ function debounce(fn, delay) {
   };
 }
 
-// ===== Smart Vietnamese Culinary Search Matcher =====
-var CULINARY_SYNONYM_GROUPS = [
-  ['uc ga', 'ức gà', 'dui ga', 'đùi gà', 'canh ga', 'cánh gà', 'thit ga', 'thịt gà', 'ga ta', 'gà ta'],
-  ['thit lon', 'thịt lợn', 'thit heo', 'thịt heo', 'ba chi', 'ba chỉ', 'ba roi', 'ba rọi', 'nac vai', 'nạc vai', 'suon', 'sườn'],
-  ['than bo', 'thăn bò', 'bap bo', 'bắp bò', 'nam bo', 'nạm bò', 'thit bo', 'thịt bò'],
-  ['dau phu', 'đậu phụ', 'dau hu', 'đậu hũ', 'tau hu', 'tàu hũ', 'dau mo', 'đậu mơ'],
-  ['tom su', 'tôm sú', 'tom dat', 'tôm đất', 'tom tuoi', 'tôm tươi'],
-  ['thom', 'thơm', 'khom', 'khóm', 'dua', 'dứa']
+// ===== Exact Vietnamese Diacritic-Aware & Whole-Word Recipe Search Scorer =====
+var _VN_WORD_CHAR_SRC = '0-9a-zA-ZÀ-ỹ';
+
+var _ANIMAL_TERMS_NFC_JS = [
+  'ức gà', 'đùi gà', 'cánh gà', 'chân gà', 'thịt gà', 'lòng gà', 'phở gà', 'cơm gà', 'miến gà', 'cháo gà', 'súp gà',
+  'thịt bò', 'bắp bò', 'gầu bò', 'bún bò', 'phở bò', 'bò kho', 'bò xào', 'bò né', 'bò lúc lắc',
+  'thịt heo', 'thịt lợn', 'ba chỉ', 'ba rọi', 'nạc vai', 'sườn', 'giò heo', 'chân giò', 'móng giò', 'chả lụa', 'giò sống', 'bún chả', 'nem rán', 'chả giò', 'thịt kho',
+  'cá lóc', 'cá quả', 'cá chuối', 'cá tràu', 'cá trắm', 'cá lăng', 'cá ngừ', 'cá thu', 'cá hồi', 'cá hú', 'cá basa', 'cá nục', 'cá bống', 'cá chép', 'cá điêu hồng', 'cá trê', 'cá kèo', 'cá kho', 'chả cá',
+  'tôm', 'mực', 'bạch tuộc', 'cua', 'ghẹ', 'ốc', 'nghêu', 'ngao', 'hến', 'sò', 'hàu', 'lươn', 'ếch', 'sứa', 'trâu',
+  'vịt', 'ngan', 'chim cút', 'trứng gà', 'trứng vịt', 'trứng cút', 'mắm tôm', 'mắm nêm', 'mắm tép', 'nước mắm',
+  'gà', 'bò', 'heo', 'lợn', 'cá'
 ];
 
-function expandSearchKeywords(keyword) {
-  var raw = String(keyword || '').toLowerCase().trim();
-  if (!raw) return [];
-  var norm = slugify(raw).replace(/-/g, ' ');
-  var terms = [raw];
-  if (norm && terms.indexOf(norm) === -1) terms.push(norm);
+var _ANIMAL_TERMS_ASCII_JS = [
+  'uc ga', 'dui ga', 'canh ga', 'chan ga', 'thit ga', 'long ga', 'pho ga', 'com ga', 'mien ga', 'chao ga', 'sup ga',
+  'thit bo', 'bap bo', 'gau bo', 'bun bo', 'pho bo', 'bo kho', 'bo xao', 'bo ne', 'bo luc lac',
+  'thit heo', 'thit lon', 'ba chi', 'ba roi', 'nac vai', 'suon', 'gio heo', 'chan gio', 'cha lua', 'gio song', 'bun cha', 'nem ran', 'cha gio', 'thit kho',
+  'ca loc', 'ca qua', 'ca chuoi', 'ca trau', 'ca tram', 'ca lang', 'ca ngu', 'ca thu', 'ca hoi', 'ca hu', 'ca basa', 'ca nuc', 'ca bong', 'ca chep', 'ca dieu hong', 'ca kho', 'cha ca',
+  'tom', 'muc', 'bach tuoc', 'cua', 'ghe', 'oc', 'ngheu', 'ngao', 'hen', 'hau', 'luon', 'ech', 'trau',
+  'vit', 'ngan', 'chim cut', 'trung ga', 'trung vit', 'trung cut', 'mam tom', 'mam nem', 'nuoc mam',
+  'ga', 'bo', 'heo', 'lon', 'ca'
+];
 
-  CULINARY_SYNONYM_GROUPS.forEach(function (group) {
-    var matchedGroup = group.some(function (syn) {
-      return raw.indexOf(syn) !== -1 || norm.indexOf(syn) !== -1;
+var _CONTIGUOUS_PHRASES_ASCII_JS = {
+  'uc ga': 1, 'dui ga': 1, 'chan ga': 1, 'thit ga': 1, 'nam dui ga': 1,
+  'trung ga': 1, 'trung vit': 1, 'trung cut': 1,
+  'thit bo': 1, 'bap bo': 1, 'bun bo': 1, 'pho bo': 1, 'pho ga': 1, 'bo kho': 1,
+  'thit heo': 1, 'thit lon': 1, 'ba chi': 1, 'ba roi': 1, 'nac vai': 1,
+  'ca loc': 1, 'ca thu': 1, 'ca hoi': 1, 'ca hu': 1, 'ca basa': 1, 'ca nuc': 1, 'ca bong': 1, 'ca chep': 1, 'ca dieu hong': 1,
+  'ca chua': 1, 'ca tim': 1, 'ca rot': 1, 'ca phe': 1, 'ca ri': 1,
+  'dau hu': 1, 'dau phu': 1, 'tau hu': 1, 'sua chua': 1, 'banh flan': 1, 'goi cuon': 1, 'cha gio': 1
+};
+
+function _escapeRegExpSearch(str) {
+  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function _normNfcWords(text) {
+  var s = String(text || '');
+  if (s.normalize) s = s.normalize('NFC');
+  s = s.toLowerCase().trim();
+  var reNonWord = new RegExp('[^' + _VN_WORD_CHAR_SRC + ']+', 'g');
+  return s.replace(reNonWord, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function _normAsciiWords(text) {
+  var s = String(text || '');
+  if (s.normalize) s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  s = s.toLowerCase().replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, ' ');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function _hasWholePhraseJS(haystack, needle, isAscii) {
+  if (!haystack || !needle) return false;
+  var cls = isAscii ? 'a-z0-9' : _VN_WORD_CHAR_SRC;
+  var re = new RegExp('(^|[^' + cls + '])' + _escapeRegExpSearch(needle) + '($|[^' + cls + '])');
+  return re.test(haystack);
+}
+
+function _replaceWholePhraseJS(text, needle, replacement, isAscii) {
+  if (!text || !needle) return text || '';
+  var cls = isAscii ? 'a-z0-9' : _VN_WORD_CHAR_SRC;
+  var re = new RegExp('(^|[^' + cls + '])' + _escapeRegExpSearch(needle) + '(?=$|[^' + cls + '])', 'g');
+  return text.replace(re, '$1' + replacement);
+}
+
+function _expandIngredientAliasesJS(rawName) {
+  var n = _normNfcWords(rawName);
+  if (!n) return [];
+  var out = [n];
+  var rawLow = String(rawName || '');
+  if (rawLow.normalize) rawLow = rawLow.normalize('NFC');
+  rawLow = rawLow.toLowerCase().trim();
+
+  var mGa = rawLow.match(/^thịt\s+gà\s*\(\s*([^)]+)\s*\)$/);
+  if (mGa && mGa[1]) {
+    var cut = _normNfcWords(mGa[1]);
+    if (cut) {
+      out.push(cut + ' gà');
+      out.push('thịt ' + cut + ' gà');
+      out.push('thịt gà');
+    }
+  } else if (n === 'cánh gà' || n === 'chân gà' || n === 'đùi gà' || n === 'ức gà') {
+    out.push('thịt gà');
+  }
+
+  var mHeo = rawLow.match(/^thịt\s+heo\s*\(\s*([^)]+)\s*\)$/);
+  if (mHeo && mHeo[1]) {
+    var cutH = _normNfcWords(mHeo[1]);
+    if (cutH) {
+      out.push(cutH);
+      out.push('thịt ' + cutH);
+      out.push('thịt heo');
+      out.push('thịt lợn');
+    }
+  } else if (n.indexOf('thịt ba chỉ') !== -1 || n === 'ba chỉ') {
+    out.push('ba chỉ', 'ba rọi', 'thịt ba chỉ', 'thịt heo', 'thịt lợn');
+  } else if (n.indexOf('thịt heo xay') !== -1) {
+    out.push('thịt băm', 'thịt bằm', 'thịt xay', 'thịt heo', 'thịt lợn');
+  } else if (n.indexOf('sườn') !== -1 && n.indexOf('chay') === -1) {
+    out.push('sườn', 'sườn heo', 'thịt heo');
+  }
+
+  if (n === 'bắp bò' || n === 'gầu bò' || n === 'thăn bò' || n === 'nạm bò') {
+    out.push('thịt bò');
+  }
+  if (n.indexOf('đậu hũ') !== -1) {
+    out.push(n.replace(/đậu hũ/g, 'đậu phụ'));
+  } else if (n.indexOf('đậu phụ') !== -1) {
+    out.push(n.replace(/đậu phụ/g, 'đậu hũ'));
+  }
+  if (n === 'tôm sú' || n === 'tôm tươi' || n === 'tôm thẻ' || n === 'tôm đất') {
+    out.push('tôm');
+  }
+
+  var seen = {};
+  return out.filter(function (x) {
+    if (!x || seen[x]) return false;
+    seen[x] = true;
+    return true;
+  });
+}
+
+function _queryRequestsAnimalWithoutVeganJS(qNfc, qAscii, hasDiacritics) {
+  if (_hasWholePhraseJS(qNfc, 'chay', false) || _hasWholePhraseJS(qAscii, 'chay', true) || qAscii.indexOf('vegan') !== -1) {
+    return false;
+  }
+  if (hasDiacritics) {
+    return _ANIMAL_TERMS_NFC_JS.some(function (t) {
+      return _hasWholePhraseJS(qNfc, t, false);
     });
-    if (matchedGroup) {
-      group.forEach(function (syn) {
-        if (terms.indexOf(syn) === -1) terms.push(syn);
+  }
+  var masked = qAscii;
+  ['ca chua', 'ca tim', 'ca rot', 'ca phe', 'ca ri', 'cacao', 'sinh to bo', 'qua bo', 'trai bo', 'bo lat'].forEach(function (nf) {
+    masked = _replaceWholePhraseJS(masked, nf, ' ', true);
+  });
+  masked = masked.replace(/\s+/g, ' ').trim();
+  return _ANIMAL_TERMS_ASCII_JS.some(function (t) {
+    return _hasWholePhraseJS(masked, t, true);
+  });
+}
+
+function _maskCandidateFalseFriendsJS(text, qAscii, isAscii) {
+  if (!text) return '';
+  var out = text;
+  var wantsMushroom = _hasWholePhraseJS(qAscii, 'nam', true);
+  var wantsEgg = _hasWholePhraseJS(qAscii, 'trung', true);
+  var wantsBroth = _hasWholePhraseJS(qAscii, 'nuoc dung', true);
+
+  if (!wantsMushroom) {
+    out = isAscii ? _replaceWholePhraseJS(out, 'nam dui ga', 'nam', true) : _replaceWholePhraseJS(out, 'nấm đùi gà', 'nấm', false);
+  }
+  if (!wantsEgg) {
+    out = isAscii ? _replaceWholePhraseJS(out, 'trung ga', 'trung', true) : _replaceWholePhraseJS(out, 'trứng gà', 'trứng', false);
+  }
+  if (!wantsBroth) {
+    out = isAscii ? _replaceWholePhraseJS(out, 'nuoc dung ga', 'nuoc dung', true) : _replaceWholePhraseJS(out, 'nước dùng gà', 'nước dùng', false);
+  }
+
+  if (isAscii) {
+    if (_hasWholePhraseJS(qAscii, 'ca', true) && !['ca chua', 'ca tim', 'ca rot', 'ca phe', 'ca ri'].some(function (p) { return _hasWholePhraseJS(qAscii, p, true); })) {
+      ['ca chua', 'ca tim', 'ca rot', 'ca phe', 'ca ri'].forEach(function (nf) {
+        out = _replaceWholePhraseJS(out, nf, 'rau', true);
+      });
+    }
+    if (_hasWholePhraseJS(qAscii, 'bo', true) && !['bo lat', 'qua bo', 'trai bo', 'sinh to bo', 'banh bo'].some(function (p) { return _hasWholePhraseJS(qAscii, p, true); })) {
+      ['bo lat', 'qua bo', 'trai bo', 'sinh to bo', 'hanh boaro', 'banh bo'].forEach(function (nb) {
+        out = _replaceWholePhraseJS(out, nb, 'thucpham', true);
+      });
+    }
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+function scoreRecipeSearch(recipe, keyword) {
+  if (!keyword || !String(keyword).trim()) return 1;
+  if (!recipe) return 0;
+
+  var qNfc = _normNfcWords(keyword);
+  var qAscii = _normAsciiWords(keyword);
+  if (!qNfc || !qAscii) return 1;
+
+  var hasDiacritics = (qNfc !== qAscii);
+  var qPhrase = hasDiacritics ? qNfc : qAscii;
+  var qTokens = qPhrase.split(' ');
+  var isAsc = !hasDiacritics;
+  var normFn = hasDiacritics ? _normNfcWords : _normAsciiWords;
+
+  var catId = parseInt(recipe.categoryId || recipe.category_id || 0, 10) || 0;
+  var catNameAsc = _normAsciiWords(recipe.categoryName || recipe.category_name || '');
+  var titleRaw = String(recipe.title || '');
+  var titleAscRaw = _normAsciiWords(titleRaw);
+  var isVeganRecipe = (catId === 5) || (catNameAsc.indexOf('chay') !== -1) || _hasWholePhraseJS(titleAscRaw, 'chay', true);
+
+  if (isVeganRecipe && _queryRequestsAnimalWithoutVeganJS(qNfc, qAscii, hasDiacritics)) {
+    return 0;
+  }
+
+  var titleNorm = _maskCandidateFalseFriendsJS(normFn(titleRaw), qAscii, isAsc);
+  var ingAliases = [];
+  if (Array.isArray(recipe.ingredients)) {
+    recipe.ingredients.forEach(function (ing) {
+      var iname = typeof ing === 'string' ? ing : (ing && (ing.name || ing.ingredient_name) || '');
+      _expandIngredientAliasesJS(iname).forEach(function (aliasNfc) {
+        if (aliasNfc === 'nước dùng gà' && (qAscii === 'ga' || qAscii === 'thit ga' || qAscii === 'uc ga' || qAscii === 'dui ga' || qAscii === 'canh ga')) {
+          return;
+        }
+        var cand = hasDiacritics ? aliasNfc : normFn(aliasNfc);
+        var maskedCand = _maskCandidateFalseFriendsJS(cand, qAscii, isAsc);
+        if (maskedCand) ingAliases.push(maskedCand);
+      });
+    });
+  }
+
+  var tagsStr = Array.isArray(recipe.tags) ? recipe.tags.join(' ') : '';
+  var tagsNorm = _maskCandidateFalseFriendsJS(normFn(tagsStr), qAscii, isAsc);
+
+  var _REGIONAL_DISH_SYN_JS_NFC = {
+    'bún chả quạt': ['bún chả hà nội', 'bún chả nướng'],
+    'bún chả nướng than': ['bún chả hà nội', 'bún chả nướng'],
+    'thịt kho hột vịt': ['thịt kho tàu', 'thịt kho trứng'],
+    'thịt kho riệu': ['thịt kho tàu'],
+    'thịt kho trứng': ['thịt kho tàu', 'thịt kho hột vịt'],
+    'thịt kho tàu': ['thịt kho hột vịt', 'thịt kho trứng'],
+    'nem rán': ['chả giò', 'nem cua bể', 'chả ram'],
+    'chả giò': ['nem rán', 'chả ram'],
+    'cá quả': ['cá lóc'],
+    'cá chuối': ['cá lóc'],
+    'cá tràu': ['cá lóc'],
+    'tào phớ': ['tàu hũ nước đường', 'tàu hũ', 'đậu hũ non'],
+    'tàu hũ nước đường': ['tào phớ', 'tàu hũ'],
+    'phở hai tô': ['phở khô gia lai'],
+    'bánh xèo huế': ['bánh khoái'],
+    'bánh xèo miền trung': ['bánh khoái'],
+    'bánh cuốn nghệ an': ['bánh mướt'],
+    'củ nén': ['hành tăm'],
+    'mộc nhĩ': ['nấm mèo'],
+    'nấm mèo': ['mộc nhĩ'],
+    'ba rọi': ['ba chỉ', 'thịt ba chỉ'],
+    'thịt ba rọi': ['thịt ba chỉ', 'ba chỉ'],
+    'thịt lợn': ['thịt heo'],
+    'bột ngô': ['bột bắp']
+  };
+  var _REGIONAL_DISH_SYN_JS_ASC = {
+    'bun cha quat': ['bun cha ha noi', 'bun cha nuong'],
+    'bun cha nuong than': ['bun cha ha noi', 'bun cha nuong'],
+    'thit kho hot vit': ['thit kho tau', 'thit kho trung'],
+    'thit kho rieu': ['thit kho tau'],
+    'thit kho trung': ['thit kho tau', 'thit kho hot vit'],
+    'thit kho tau': ['thit kho hot vit', 'thit kho trung'],
+    'nem ran': ['cha gio', 'nem cua be', 'cha ram'],
+    'cha gio': ['nem ran', 'cha ram'],
+    'ca qua': ['ca loc'],
+    'ca chuoi': ['ca loc'],
+    'ca trau': ['ca loc'],
+    'tao pho': ['tau hu nuoc duong', 'tau hu', 'dau hu non'],
+    'tau hu nuoc duong': ['tao pho', 'tau hu'],
+    'pho hai to': ['pho kho gia lai'],
+    'banh xeo hue': ['banh khoai'],
+    'banh xeo mien trung': ['banh khoai'],
+    'banh cuon nghe an': ['banh muot'],
+    'cu nen': ['hanh tam'],
+    'moc nhi': ['nam meo'],
+    'nam meo': ['moc nhi'],
+    'ba roi': ['ba chi', 'thit ba chi'],
+    'thit ba roi': ['thit ba chi', 'ba chi'],
+    'thit lon': ['thit heo'],
+    'bot ngo': ['bot bap']
+  };
+
+  var altPhrases = [qPhrase];
+  if (qPhrase.indexOf('đậu hũ') !== -1) altPhrases.push(qPhrase.replace(/đậu hũ/g, 'đậu phụ'));
+  else if (qPhrase.indexOf('đậu phụ') !== -1) altPhrases.push(qPhrase.replace(/đậu phụ/g, 'đậu hũ'));
+  else if (qPhrase.indexOf('dau hu') !== -1) altPhrases.push(qPhrase.replace(/dau hu/g, 'dau phu'));
+  else if (qPhrase.indexOf('dau phu') !== -1) altPhrases.push(qPhrase.replace(/dau phu/g, 'dau hu'));
+
+  var synMapJS = hasDiacritics ? _REGIONAL_DISH_SYN_JS_NFC : _REGIONAL_DISH_SYN_JS_ASC;
+  Object.keys(synMapJS).forEach(function (srcTerm) {
+    if (_hasWholePhraseJS(qPhrase, srcTerm, isAsc)) {
+      synMapJS[srcTerm].forEach(function (tgt) {
+        var repl = _replaceWholePhraseJS(qPhrase, srcTerm, tgt, isAsc).trim();
+        if (repl && altPhrases.indexOf(repl) === -1) altPhrases.push(repl);
+        if (qPhrase === srcTerm && altPhrases.indexOf(tgt) === -1) altPhrases.push(tgt);
       });
     }
   });
-  return terms;
+
+  // Rank 1 (100): Exact whole-word phrase in title
+  for (var i = 0; i < altPhrases.length; i++) {
+    if (_hasWholePhraseJS(titleNorm, altPhrases[i], isAsc)) return 100;
+  }
+
+  // Rank 2 (85): Exact whole-word phrase (or all tokens of species) inside an ingredient alias
+  for (var j = 0; j < ingAliases.length; j++) {
+    var alias = ingAliases[j];
+    for (var k = 0; k < altPhrases.length; k++) {
+      if (_hasWholePhraseJS(alias, altPhrases[k], isAsc)) return 85;
+    }
+    if (qTokens.length >= 2 && !(qAscii === 'uc ga' || qAscii === 'dui ga' || qAscii === 'canh ga' || qAscii === 'chan ga')) {
+      var allInAlias = qTokens.every(function (tok) { return _hasWholePhraseJS(alias, tok, isAsc); });
+      if (allInAlias) return 85;
+    }
+  }
+
+  if (_CONTIGUOUS_PHRASES_ASCII_JS[qAscii]) {
+    for (var m = 0; m < altPhrases.length; m++) {
+      if (_hasWholePhraseJS(tagsNorm, altPhrases[m], isAsc)) return 60;
+    }
+    return 0;
+  }
+
+  var cpKeys = Object.keys(_CONTIGUOUS_PHRASES_ASCII_JS);
+  for (var cIdx = 0; cIdx < cpKeys.length; cIdx++) {
+    var cp = cpKeys[cIdx];
+    if (_hasWholePhraseJS(qAscii, cp, true)) {
+      var cpCheck = cp;
+      if (hasDiacritics) {
+        var idxToks = qAscii.split(' ');
+        var cpToks = cp.split(' ');
+        for (var pIdx = 0; pIdx <= idxToks.length - cpToks.length; pIdx++) {
+          if (idxToks.slice(pIdx, pIdx + cpToks.length).join(' ') === cp) {
+            cpCheck = qTokens.slice(pIdx, pIdx + cpToks.length).join(' ');
+            break;
+          }
+        }
+      }
+      var hasSubPhrase = _hasWholePhraseJS(titleNorm, cpCheck, isAsc) || ingAliases.some(function (a) {
+        return _hasWholePhraseJS(a, cpCheck, isAsc);
+      });
+      if (!hasSubPhrase) return 0;
+    }
+  }
+
+  // Rank 3 (60): Strict AND across title + ingredients + tags
+  var combined = (titleNorm + ' ' + ingAliases.join(' ') + ' ' + tagsNorm).trim();
+  var allMatched = qTokens.every(function (tok) {
+    return _hasWholePhraseJS(combined, tok, isAsc);
+  });
+  return allMatched ? 60 : 0;
 }
 
 function matchesRecipeSearch(recipe, keyword) {
-  if (!keyword || !String(keyword).trim()) return true;
-  if (!recipe) return false;
-  var terms = expandSearchKeywords(keyword);
-  var haystackParts = [
-    recipe.title || '',
-    recipe.description || '',
-    recipe.categoryName || '',
-    recipe.occasion || ''
-  ];
-  if (Array.isArray(recipe.ingredients)) {
-    recipe.ingredients.forEach(function (ing) {
-      if (typeof ing === 'string') {
-        haystackParts.push(ing);
-      } else if (ing) {
-        haystackParts.push(ing.name || '');
-        if (ing.ingredientId === 2) haystackParts.push('ức gà đùi gà thịt gà');
-        if (ing.ingredientId === 1) haystackParts.push('thịt heo thịt lợn ba chỉ sườn');
-        if (ing.ingredientId === 3) haystackParts.push('thịt bò thăn bò bắp bò');
-        if (ing.ingredientId === 6) haystackParts.push('đậu hũ đậu phụ tàu hũ');
-      }
-    });
-  }
-  var fullText = haystackParts.join(' ').toLowerCase();
-  var fullNorm = slugify(fullText).replace(/-/g, ' ');
-
-  return terms.some(function (t) {
-    return fullText.indexOf(t) !== -1 || fullNorm.indexOf(t) !== -1;
-  });
+  return scoreRecipeSearch(recipe, keyword) > 0;
 }

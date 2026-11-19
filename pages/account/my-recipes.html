@@ -211,7 +211,7 @@
       var html = '<div class="recipe-grid">';
       displayRecipes.forEach(function(recipe) {
         var recipeTitle = recipe.title || recipe.name || 'Không có tên';
-        var imgSrc = recipe.image || recipe.imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg';
+        var imgSrc = getImageUrl(recipe.image || recipe.imageUrl, getCategoryFallbackImage(recipe.categoryId));
         var difficulty = recipe.difficulty || 'Trung bình';
         var totalTime = ((recipe.prepTime || 0) + (recipe.cookTime || 0)) || '';
         var timeStr = totalTime ? totalTime + ' phút' : '';
@@ -300,14 +300,15 @@
 
       document.getElementById('deleteConfirmBtn').addEventListener('click', function() {
         if (!deleteTargetId) return;
-
-        CookMateStorage.deleteRecipe(deleteTargetId);
-        closeDeleteModal();
-        renderMyRecipes();
-
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Đã xóa công thức thành công!', 'success');
-        }
+        var button=this;
+        button.disabled=true;
+        CookMateStorage.deleteRecipe(deleteTargetId).then(function(){
+          closeDeleteModal();
+          renderMyRecipes();
+          if (typeof CookMateUI !== 'undefined') CookMateUI.showToast('Đã xóa công thức thành công!', 'success');
+        }).catch(function(error){
+          if (typeof CookMateUI !== 'undefined') CookMateUI.showToast(error.message||'Không thể xóa công thức.','error');
+        }).finally(function(){button.disabled=false;});
       });
     }
   </script>

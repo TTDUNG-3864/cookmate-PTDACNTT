@@ -175,6 +175,7 @@
                 </tbody>
               </table>
             </div>
+            <div id="adminIngredientsPagination" class="p-4"></div>
           </div>
         </div>
 
@@ -243,7 +244,16 @@
     }
 
     function saveIngredients() {
-      CookMateStorage.setIngredients(currentIngredients);
+      return CookMateStorage.setIngredients(currentIngredients).then(function(items){
+        currentIngredients=items.map(function(i){return Object.assign({},i);});
+        renderIngredientTable();
+        return items;
+      }).catch(function(error){
+        currentIngredients=CookMateStorage.getAllIngredients().map(function(i){return Object.assign({},i);});
+        renderIngredientTable();
+        if(typeof CookMateUI!=='undefined')CookMateUI.showToast(error.message||'Không thể lưu nguyên liệu.','error');
+        return [];
+      });
     }
 
     function populateGroupFilter() {
@@ -283,17 +293,29 @@
         list = list.filter(function(i) { return i.category === groupVal; });
       }
 
+      var pagEl = document.getElementById('adminIngredientsPagination');
       if (countEl) countEl.textContent = list.length;
 
       if (list.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-6 text-secondary">Không tìm thấy nguyên liệu nào</td></tr>';
+        if (pagEl) pagEl.innerHTML = '';
         return;
       }
 
-      tbody.innerHTML = list.map(function(i, idx) {
+      var perPage = 25;
+      var totalPages = Math.ceil(list.length / perPage);
+      if (window._adminIngFilterKey !== (keyword + '|' + groupVal)) {
+        window._adminIngFilterKey = keyword + '|' + groupVal;
+        window._adminIngPage = 1;
+      }
+      var curPage = Math.max(1, Math.min(totalPages, window._adminIngPage || 1));
+      var offset = (curPage - 1) * perPage;
+      var pageItems = list.slice(offset, offset + perPage);
+
+      tbody.innerHTML = pageItems.map(function(i, idx) {
         return `
           <tr>
-            <td>${idx + 1}</td>
+            <td>${offset + idx + 1}</td>
             <td><strong>${escapeHtml(i.name)}</strong></td>
             <td><span class="badge badge-secondary text-xs">${escapeHtml(i.category || 'Khác')}</span></td>
             <td><span class="text-xs font-mono">${escapeHtml(i.unit || 'g')}</span></td>
@@ -314,6 +336,13 @@
           </tr>
         `;
       }).join('');
+      if (pagEl && typeof CookMateUI !== 'undefined') {
+        window.goToAdminIngPage = function(p) {
+          window._adminIngPage = p;
+          renderIngredientTable();
+        };
+        pagEl.innerHTML = CookMateUI.createPagination(curPage, totalPages, 'goToAdminIngPage');
+      }
     }
 
     function openAddIngredientModal() {

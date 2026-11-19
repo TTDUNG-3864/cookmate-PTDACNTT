@@ -14,12 +14,11 @@ Phân tích chính xác ý định câu hỏi tiếng Việt (có dấu & không
 """
 
 import json
-import os
 import re
-import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend import database as db
+from backend.config import Config
 
 
 OFF_TOPIC_KEYWORDS = [
@@ -533,8 +532,11 @@ def _handle_fridge_search(
         "gao": "Gạo",
         "nuoc cot dua": "Nước cốt dừa",
     }
-    for kw, label in synonym_keywords.items():
-        if re.search(r"\b" + re.escape(kw) + r"\b", msg_norm):
+    masked_syn_msg = msg_norm
+    for kw in sorted(synonym_keywords.keys(), key=len, reverse=True):
+        label = synonym_keywords[kw]
+        if re.search(r"\b" + re.escape(kw) + r"\b", masked_syn_msg):
+            masked_syn_msg = re.sub(r"\b" + re.escape(kw) + r"\b", " __M__ ", masked_syn_msg)
             if not any(_normalize(label) in _normalize(x) or _normalize(x) in _normalize(label) for x in detected_ing_names):
                 detected_ing_names.append(label)
 
@@ -817,55 +819,15 @@ def _handle_recipe_context_question(
 
 
 # ============================================================
-# GOOGLE GEMINI AI + RAG ENGINE (gemini-4-hydrogen Interactions API)
+# GOOGLE GEMINI AI + RAG ENGINE (centralized GenerateContent failover manager)
 # ============================================================
 
-GEMINI_MODEL = "gemini-4-hydrogen"
-_ENV_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+GEMINI_MODEL = Config.GEMINI_PRIMARY_MODEL
 
 
 def get_configured_api_key(override_key: Optional[str] = None) -> str:
-    """Lấy GEMINI_API_KEY từ tham số truyền vào, biến môi trường hoặc file .env."""
-    if override_key and str(override_key).strip():
-        return str(override_key).strip()
-
-    env_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if env_key and env_key.strip():
-        return env_key.strip()
-
-    if os.path.exists(_ENV_FILE_PATH):
-        try:
-            with open(_ENV_FILE_PATH, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("GEMINI_API_KEY=") or line.startswith("GOOGLE_API_KEY="):
-                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        if val:
-                            return val
-        except OSError:
-            pass
-    return ""
-
-
-def save_api_key_to_env(api_key: str) -> bool:
-    """Lưu GEMINI_API_KEY vào biến môi trường và file .env tại thư mục gốc."""
-    cleaned = (api_key or "").strip()
-    os.environ["GEMINI_API_KEY"] = cleaned
-    try:
-        lines: List[str] = []
-        if os.path.exists(_ENV_FILE_PATH):
-            with open(_ENV_FILE_PATH, "r", encoding="utf-8") as f:
-                lines = [
-                    ln for ln in f.readlines()
-                    if not ln.strip().startswith("GEMINI_API_KEY=")
-                ]
-        if cleaned:
-            lines.append(f"GEMINI_API_KEY={cleaned}\n")
-        with open(_ENV_FILE_PATH, "w", encoding="utf-8") as f:
-            f.writelines(lines)
-        return True
-    except OSError:
-        return False
+    """Return only the server-configured key; request-provided overrides are ignored."""
+    return Config.GEMINI_API_KEY
 
 
 def _build_rag_system_instruction(
@@ -903,7 +865,7 @@ def _build_rag_system_instruction(
         "cấp cứu sự cố món ăn (bị cháy, khê, quá mặn, cơm nhão/sống, nước phở đục, thịt dai, quá cay/chua...), "
         "và cách thay thế nguyên liệu cụ thể khi người dùng bị thiếu (ví dụ: không có xì dầu, thiếu nước cốt dừa, hết bột năng, thiếu rượu nấu ăn...).\n"
         "2. Khi người dùng hỏi có nguyên liệu X, Y thì nấu món gì, hoặc hỏi về thực đơn Calo / quy đổi khẩu phần: "
-        "hãy ưu tiên đối chiếu với DANH SÁCH MÓN ĂN TRONG CSDL COOKMATE dưới đây và gợi ý thêm các món Việt Nam phù hợp.\n"
+        "BẮT BUỘC chỉ lấy 100% các món ăn có thật trong DANH SÁCH MÓN ĂN TRONG CSDL COOKMATE dưới đây (kèm đúng định lượng và Calo từ CSDL), tuyệt đối không tự đoán hay bịa món ngoài CSDL.\n"
         "3. Nếu người dùng hỏi các chủ đề hoàn toàn không liên quan đến ẩm thực/nấu ăn/dinh dưỡng/bếp núc (như lập trình, toán học, chính trị, chứng khoán...), "
         "hãy lịch sự từ chối và nhắc rằng bạn là Trợ lý Đầu bếp AI của CookMate.\n"
         "4. Trình bày câu trả lời bằng tiếng Việt tự nhiên, thân thiện, có gạch đầu dòng rõ ràng, in đậm (`**...**`) các bước quan trọng và đặt định lượng trong dấu backtick (`` `...` ``).\n\n"
@@ -917,85 +879,27 @@ def _call_gemini_rag(
     message: str,
     system_instruction: str,
     api_key: str,
-    previous_interaction_id: Optional[str] = None,
+    conversation_history: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """
-    Gọi Google Gemini Interactions API (model gemini-4-hydrogen) qua SDK google-genai
-    hoặc REST endpoint chuẩn https://generativelanguage.googleapis.com/v1/interactions.
-    """
-    if not api_key:
+    """Compatibility wrapper; all model calls now go through the failover manager."""
+    if not Config.GEMINI_API_KEY:
         return None
-
-    # 1. Ưu tiên dùng SDK chính thức google-genai (>= 3.2.0)
     try:
-        from google import genai  # type: ignore
+        from backend.gemini_manager import generate_ai_response
 
-        client = genai.Client(api_key=api_key)
-        req_kwargs: Dict[str, Any] = {
-            "model": GEMINI_MODEL,
-            "system_instruction": system_instruction,
-            "input": message,
-        }
-        if previous_interaction_id:
-            req_kwargs["previous_interaction_id"] = previous_interaction_id
-
-        interaction = client.interactions.create(**req_kwargs)
-        output_text = getattr(interaction, "output_text", None)
-        if output_text and str(output_text).strip():
-            return {
-                "reply": str(output_text).strip(),
-                "interactionId": getattr(interaction, "id", None),
-                "model": GEMINI_MODEL,
-            }
-    except ImportError:
-        pass
-    except Exception:
-        pass
-
-    # 2. Fallback gọi trực tiếp REST API v1 Interactions bằng urllib chuẩn của Python
-    try:
-        url = "https://generativelanguage.googleapis.com/v1/interactions"
-        payload: Dict[str, Any] = {
-            "model": GEMINI_MODEL,
-            "system_instruction": system_instruction,
-            "input": message,
-        }
-        if previous_interaction_id:
-            payload["previous_interaction_id"] = previous_interaction_id
-
-        data_bytes = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data_bytes,
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
-            },
-            method="POST",
+        generated = generate_ai_response(
+            message,
+            conversation_history=conversation_history,
+            system_instruction=system_instruction,
         )
-        with urllib.request.urlopen(req, timeout=18) as resp:
-            resp_data = json.loads(resp.read().decode("utf-8"))
-            output_text = resp_data.get("output_text")
-            if not output_text:
-                # Trích xuất từ mảng steps nếu cần
-                steps = resp_data.get("steps") or []
-                texts = []
-                for st in steps:
-                    if st.get("type") == "model_output":
-                        for part in st.get("content") or []:
-                            if part.get("type") == "text" and part.get("text"):
-                                texts.append(part["text"])
-                output_text = "\n".join(texts).strip()
-            if output_text:
-                return {
-                    "reply": output_text,
-                    "interactionId": resp_data.get("id"),
-                    "model": GEMINI_MODEL,
-                }
+        return {
+            "reply": generated["response"],
+            "model": generated["model_used"],
+            "fallback_used": generated["fallback_used"],
+        }
     except Exception:
-        pass
-
-    return None
+        # The legacy/local route should continue with its internal cooking guide.
+        return None
 
 
 # ============================================================
@@ -1113,7 +1017,6 @@ def generate_chatbot_response(
     context: Optional[Dict[str, Any]] = None,
     db_path: Optional[str] = None,
     api_key: Optional[str] = None,
-    previous_interaction_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     context = context or {}
     raw_msg = (message or "").strip()
@@ -1155,20 +1058,19 @@ def generate_chatbot_response(
         current_recipe_id=current_recipe_id,
     )
 
-    # Nếu đã có GEMINI_API_KEY và câu hỏi thuộc lĩnh vực ẩm thực -> Gọi Gemini RAG (gemini-4-hydrogen)
+    # Nếu đã có GEMINI_API_KEY và câu hỏi thuộc lĩnh vực ẩm thực -> gọi manager Primary/Fallback.
     if effective_key and local_result.get("intent") != "off_topic":
         sys_instruction = _build_rag_system_instruction(all_recipes, current_recipe_id=current_recipe_id)
         gemini_resp = _call_gemini_rag(
             message=raw_msg,
             system_instruction=sys_instruction,
             api_key=effective_key,
-            previous_interaction_id=previous_interaction_id,
+            conversation_history=context.get("history"),
         )
         if gemini_resp and gemini_resp.get("reply"):
             return {
                 **local_result,
                 "reply": gemini_resp["reply"],
-                "interactionId": gemini_resp.get("interactionId"),
                 "aiMode": "gemini",
                 "model": gemini_resp.get("model", GEMINI_MODEL),
                 "hasApiKey": True,

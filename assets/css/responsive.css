@@ -336,13 +336,20 @@
 
   /* Pagination compact */
   .pagination {
-    gap: 0;
+    gap: 4px;
+    padding: var(--space-4) 0;
   }
 
-  .pagination__item {
-    min-width: 36px;
-    height: 36px;
+  .pagination__item,
+  .pagination__btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 6px;
     font-size: var(--text-xs);
+  }
+
+  .pagination__label {
+    display: none;
   }
 
   /* Tables scroll horizontally */
@@ -351,16 +358,16 @@
   }
 
   /* Modal full width mobile */
-  .modal__content {
-    max-width: none;
-    max-height: 100vh;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    margin-top: auto;
+  .modal__content,
+  .modal-dialog {
+    max-width: 100%;
+    max-height: min(92vh, calc(100vh - 16px));
+    border-radius: var(--radius-lg);
   }
 
   .modal {
-    align-items: flex-end;
-    padding: 0;
+    align-items: center;
+    padding: 8px 12px;
   }
 
   /* Admin layout */

@@ -190,7 +190,7 @@
   <script src="../../assets/js/admin-shell.js"></script>
 
   <script>
-    var userStatusOverrides = JSON.parse(localStorage.getItem('cookmate_user_status_overrides') || '{}');
+    var userStatusOverrides = {};
 
     document.addEventListener('DOMContentLoaded', function() {
       if (!checkAdminAuth()) return;
@@ -308,13 +308,11 @@
       var actionText = nextStatus === 'active' ? 'mở khóa' : 'tạm khóa';
 
       CookMateUI.showConfirm('Bạn có chắc muốn ' + actionText + ' tài khoản của "' + name + '"?', function() {
-        userStatusOverrides[userId] = nextStatus;
-        localStorage.setItem('cookmate_user_status_overrides', JSON.stringify(userStatusOverrides));
         if (typeof CookMateStorage.setUserStatus === 'function') {
-          CookMateStorage.setUserStatus(userId, nextStatus);
+          CookMateStorage.setUserStatus(userId, nextStatus).then(function(){
+            CookMateUI.showToast('Đã '+actionText+' tài khoản thành công','success');renderUsersTable();
+          }).catch(function(error){CookMateUI.showToast(error.message||'Không thể cập nhật tài khoản.','error');});
         }
-        CookMateUI.showToast('Đã ' + actionText + ' tài khoản thành công', 'success');
-        renderUsersTable();
       });
     }
   </script>

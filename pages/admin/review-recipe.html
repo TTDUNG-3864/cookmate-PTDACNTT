@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chi tiết Duyệt Công thức | CookMate Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="../../assets/css/variables.css">
+  <link rel="stylesheet" href="../../assets/css/reset.css">
+  <link rel="stylesheet" href="../../assets/css/base.css">
+  <link rel="stylesheet" href="../../assets/css/layout.css">
+  <link rel="stylesheet" href="../../assets/css/components.css">
+  <link rel="stylesheet" href="../../assets/css/pages.css">
+  <link rel="stylesheet" href="../../assets/css/admin.css">
+  <link rel="stylesheet" href="../../assets/css/responsive.css">
+  <script src="../../assets/js/admin-guard.js"></script>
+  <script>
+    (function() {
+      var isClosed = sessionStorage.getItem('cookmate_sidebar_closed') === 'true' ||
+                     sessionStorage.getItem('cookmate_sidebar_collapsed') === 'true';
+      if (isClosed && window.innerWidth >= 1024) {
+        document.documentElement.classList.add('sidebar-is-closed');
+      }
+    })();
+  </script>
+</head>
+<body data-admin-page="approve">
+
+  <div class="admin-layout">
+
+    <!-- Sidebar -->
+    <aside class="admin-sidebar" id="adminSidebar">
+      <div class="admin-sidebar__header">
+        <a href="index.html" class="admin-sidebar__logo">
+          <i class="fa-solid fa-utensils"></i>
+          <span>CookMate</span>
+        </a>
+        <span class="admin-sidebar__badge">Admin</span>
+        <button class="admin-sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Đóng menu sidebar" title="Đóng menu sidebar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <nav class="admin-sidebar__nav">
+        <div class="admin-sidebar__top-action">
+          <a href="../../index.html" class="admin-sidebar__link admin-sidebar__link--website" id="btnViewWebsite" data-tooltip="Xem website CookMate" title="Xem website CookMate">
+            <i class="fa-solid fa-globe"></i>
+            <span>Xem website CookMate</span>
+          </a>
+        </div>
+        <div class="admin-sidebar__divider"></div>
+
+        <div class="admin-sidebar__section">
+          <div class="admin-sidebar__section-title">Hệ thống</div>
+          <a href="index.html" class="admin-sidebar__link" data-tooltip="Tổng quan" title="Tổng quan">
+            <i class="fa-solid fa-chart-pie"></i>
+            <span>Tổng quan</span>
+          </a>
+          <a href="statistics.html" class="admin-sidebar__link" data-tooltip="Thống kê & Báo cáo" title="Thống kê & Báo cáo">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Thống kê & Báo cáo</span>
+          </a>
+        </div>
+
+        <div class="admin-sidebar__section">
+          <div class="admin-sidebar__section-title">Kiểm duyệt & Biên tập</div>
+          <a href="approve-recipes.html" class="admin-sidebar__link active" data-tooltip="Duyệt công thức" title="Duyệt công thức">
+            <i class="fa-solid fa-clipboard-check"></i>
+            <span>Duyệt công thức</span>
+            <span class="badge badge-warning text-xs ml-auto" id="sidebarPendingBadge" style="display:none">0</span>
+          </a>
+          <a href="recipe-form.html" class="admin-sidebar__link" data-tooltip="Thêm công thức" title="Thêm công thức">
+            <i class="fa-solid fa-circle-plus"></i>
+            <span>Thêm công thức</span>
+          </a>
+          <a href="recipes.html" class="admin-sidebar__link" data-tooltip="Quản lý Công thức" title="Quản lý Công thức">
+            <i class="fa-solid fa-book-open"></i>
+            <span>Quản lý Công thức</span>
+          </a>
+          <a href="categories.html" class="admin-sidebar__link" data-tooltip="Quản lý Danh mục" title="Quản lý Danh mục">
+            <i class="fa-solid fa-layer-group"></i>
+            <span>Quản lý Danh mục</span>
+          </a>
+          <a href="ingredients.html" class="admin-sidebar__link" data-tooltip="Quản lý Nguyên liệu" title="Quản lý Nguyên liệu">
+            <i class="fa-solid fa-carrot"></i>
+            <span>Quản lý Nguyên liệu</span>
+          </a>
+        </div>
+
+        <div class="admin-sidebar__section">
+          <div class="admin-sidebar__section-title">Người dùng & Tương tác</div>
+          <a href="accounts.html" class="admin-sidebar__link" data-tooltip="Quản lý Tài khoản" title="Quản lý Tài khoản">
+            <i class="fa-solid fa-users"></i>
+            <span>Quản lý Tài khoản</span>
+          </a>
+          <a href="comments.html" class="admin-sidebar__link" data-tooltip="Quản lý Bình luận" title="Quản lý Bình luận">
+            <i class="fa-solid fa-comments"></i>
+            <span>Quản lý Bình luận</span>
+          </a>
+        </div>
+
+        <div class="admin-sidebar__section">
+          <div class="admin-sidebar__section-title">Tài khoản & Phiên</div>
+          <button type="button" class="admin-sidebar__link text-danger w-full text-left" onclick="handleLogout()" data-tooltip="Đăng xuất" title="Đăng xuất" style="background:none; border:none; cursor:pointer;">
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>Đăng xuất</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="admin-sidebar__footer">
+        <div class="admin-sidebar__user">
+          <div class="user-avatar" id="adminUserAvatar">A</div>
+          <div>
+            <div class="admin-sidebar__user-name" id="adminUserName">Admin</div>
+            <div class="admin-sidebar__user-role">Quản trị viên</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="admin-sidebar__backdrop" id="sidebarBackdrop"></div>
+
+    <!-- Main Content -->
+    <main class="admin-main">
+      <header class="admin-header">
+        <h1 class="admin-header__title" id="reviewPageHeaderTitle">
+          <i class="fa-solid fa-clipboard-check text-primary mr-2"></i> Chi tiết kiểm duyệt công thức
+        </h1>
+        <div class="admin-header__actions">
+          <a href="approve-recipes.html" class="btn btn-ghost btn-sm">
+            <i class="fa-solid fa-arrow-left"></i> Quay lại hàng đợi
+          </a>
+        </div>
+      </header>
+
+      <div class="admin-content" style="max-width: 1020px;">
+        <div id="reviewPageContainer">
+          <div class="admin-card p-8 text-center">
+            <i class="fa-solid fa-spinner fa-spin text-2xl text-primary"></i>
+            <p class="text-sm text-secondary mt-2">Đang tải toàn bộ nội dung công thức từ máy chủ...</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Reject Reason Modal -->
+  <div class="admin-modal-overlay" id="rejectModal" role="dialog" aria-modal="true" aria-labelledby="rejectModalTitle" style="display: none;">
+    <div class="admin-modal-dialog admin-modal-dialog--sm">
+      <div class="admin-modal-header">
+        <h3 class="admin-modal-title" id="rejectModalTitle"><i class="fa-solid fa-triangle-exclamation text-danger"></i> Từ chối công thức</h3>
+        <button type="button" class="admin-modal-close" onclick="closeRejectModal()" aria-label="Đóng">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="admin-modal-body">
+        <p class="mb-3 text-sm">Vui lòng nêu rõ lý do từ chối để tác giả biết và chỉnh sửa lại nội dung:</p>
+        
+        <div class="mb-3">
+          <label class="form-label text-xs font-bold text-secondary mb-1">Gợi ý lý do nhanh:</label>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="btn btn-sm btn-ghost border" onclick="setQuickReason('Định lượng nguyên liệu chưa rõ ràng hoặc thiếu đơn vị (gam, ml).')">Thiếu định lượng</button>
+            <button type="button" class="btn btn-sm btn-ghost border" onclick="setQuickReason('Hình ảnh món ăn mờ hoặc không đúng với món ăn.')">Ảnh chưa chuẩn</button>
+            <button type="button" class="btn btn-sm btn-ghost border" onclick="setQuickReason('Các bước chế biến quá sơ sài, thiếu hướng dẫn cụ thể.')">Bước nấu sơ sài</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="rejectionReasonText" class="form-label">Lý do từ chối <span class="required">*</span></label>
+          <textarea id="rejectionReasonText" class="form-input form-textarea" rows="4" placeholder="Nhập lý do chi tiết gửi đến người đăng..."></textarea>
+          <div class="form-error" id="rejectionError" style="display:none; color:#DC2626; font-size:12px; margin-top:4px;">Vui lòng nhập lý do từ chối.</div>
+        </div>
+      </div>
+      <div class="admin-modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeRejectModal()">Hủy</button>
+        <button type="button" class="btn btn-danger" id="confirmRejectBtn">
+          <i class="fa-solid fa-ban"></i> Xác nhận từ chối
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="../../assets/js/utils.js"></script>
+  <script src="../../assets/js/data/categories.js"></script>
+  <script src="../../assets/js/data/ingredients.js"></script>
+  <script src="../../assets/js/data/users.js"></script>
+  <script src="../../assets/js/data/recipes.js"></script>
+  <script src="../../assets/js/storage.js"></script>
+  <script src="../../assets/js/components.js"></script>
+  <script src="../../assets/js/navigation.js"></script>
+  <script src="../../assets/js/app.js"></script>
+  <script src="../../assets/js/admin-shell.js"></script>
+
+  <script>
+    var currentReviewRecipe = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!checkAdminAuth()) return;
+      updatePendingBadge();
+      loadRecipeForReview();
+    });
+
+    function checkAdminAuth() {
+      if (typeof CookMateStorage === 'undefined' || !CookMateStorage.isLoggedIn()) {
+        window.location.href = '../auth/login.html?redirect=' + encodeURIComponent('pages/admin/approve-recipes.html');
+        return false;
+      }
+      var user = CookMateStorage.getCurrentUser();
+      if (!user || user.role !== 'admin') {
+        window.location.href = '../auth/login.html?redirect=' + encodeURIComponent('pages/admin/approve-recipes.html');
+        return false;
+      }
+      var nameEl = document.getElementById('adminUserName');
+      var avatarEl = document.getElementById('adminUserAvatar');
+      if (nameEl) nameEl.textContent = user.name;
+      if (avatarEl) avatarEl.textContent = user.name.charAt(0).toUpperCase();
+      return true;
+    }
+
+    function updatePendingBadge() {
+      var sideBadge = document.getElementById('sidebarPendingBadge');
+      if (sideBadge && CookMateStorage.getPendingRecipes) {
+        var count = CookMateStorage.getPendingRecipes().length;
+        sideBadge.textContent = count;
+        sideBadge.style.display = count > 0 ? 'inline-flex' : 'none';
+      }
+    }
+
+    function loadRecipeForReview() {
+      var params = new URLSearchParams(window.location.search);
+      var recipeId = params.get('id');
+      var container = document.getElementById('reviewPageContainer');
+      if (!recipeId) {
+        container.innerHTML =
+          '<div class="admin-card p-8 text-center">' +
+            '<p class="text-danger font-bold mb-4">Thiếu mã công thức cần kiểm duyệt.</p>' +
+            '<a href="approve-recipes.html" class="btn btn-primary btn-sm"><i class="fa-solid fa-arrow-left"></i> Quay lại hàng đợi</a>' +
+          '</div>';
+        return;
+      }
+
+      var fetchPromise = CookMateStorage.fetchAdminRecipeReview
+        ? CookMateStorage.fetchAdminRecipeReview(recipeId)
+        : CookMateStorage.fetchRecipeDetail(recipeId, false, true);
+
+      Promise.resolve(fetchPromise).then(function(payload) {
+        var recipe = (payload && payload.recipe) ? Object.assign({}, payload, payload.recipe) : payload;
+        if (!recipe || !recipe.id) throw new Error('Không tìm thấy công thức cần duyệt.');
+        currentReviewRecipe = recipe;
+        renderReviewDetail(recipe);
+      }).catch(function(err) {
+        container.innerHTML =
+          '<div class="admin-card p-8 text-center">' +
+            '<p class="text-danger font-bold mb-4">' + escapeHtml((err && err.message) || 'Không thể tải thông tin công thức.') + '</p>' +
+            '<a href="approve-recipes.html" class="btn btn-primary btn-sm"><i class="fa-solid fa-arrow-left"></i> Quay lại hàng đợi</a>' +
+          '</div>';
+      });
+    }
+
+    function renderReviewDetail(recipe) {
+      var container = document.getElementById('reviewPageContainer');
+      var categories = CookMateStorage.getAllCategories();
+      var cat = categories.find(function(c) { return String(c.id) === String(recipe.categoryId); });
+      var catName = recipe.categoryName || (cat ? cat.name : (recipe.category || 'Chưa phân loại'));
+
+      var headerTitle = document.getElementById('reviewPageHeaderTitle');
+      if (headerTitle) {
+        headerTitle.innerHTML = '<i class="fa-solid fa-clipboard-check text-primary mr-2"></i> Kiểm duyệt: ' + escapeHtml(recipe.title || recipe.name || '');
+      }
+
+      var statusUpper = String(recipe.status || 'pending').toUpperCase();
+      var statusBadgeHtml = statusUpper === 'APPROVED'
+        ? '<span class="badge badge-success">Đã duyệt (APPROVED)</span>'
+        : (statusUpper === 'REJECTED'
+          ? '<span class="badge badge-danger">Đã từ chối (REJECTED)</span>'
+          : '<span class="badge badge-warning">Chờ duyệt (PENDING)</span>');
+
+      var authorName = recipe.authorName || (recipe.author && recipe.author.name) || 'Thành viên CookMate';
+      var authorEmail = recipe.authorEmail || (recipe.author && recipe.author.email) || 'Chưa cập nhật';
+      var cuisine = recipe.cuisine || 'Món Việt';
+      var difficulty = recipe.difficulty || 'Trung bình';
+      var prepTime = Number(recipe.prepTime || 0);
+      var cookTime = Number(recipe.cookTime || 0);
+      var totalTime = Number(recipe.totalTime != null ? recipe.totalTime : (prepTime + cookTime));
+      var servings = Number(recipe.servings || 1);
+      var occasion = recipe.occasion || recipe.holiday || 'Hằng ngày / Mọi dịp';
+      var dishName = (recipe.dish && recipe.dish.name) ? recipe.dish.name : (recipe.title || 'Chưa gắn món chuẩn');
+      var ts = recipe.createdAt || recipe.created_at || '';
+      var sentDateTime = typeof formatDateTimeVN === 'function' ? formatDateTimeVN(ts) : (ts || 'Chưa cập nhật');
+      var sentRelative = typeof timeAgo === 'function' ? timeAgo(ts) : '';
+      var imgUrl = typeof getImageUrl === 'function'
+        ? getImageUrl(recipe.image || recipe.imageUrl, '../../assets/images/placeholders/recipe-placeholder.svg')
+        : (recipe.image || recipe.imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg');
+
+      // Section B: Nguyên liệu (STT | Nguyên liệu | Số lượng | Đơn vị | Ghi chú)
+      var ings = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+      var ingredientsSectionHtml = '';
+      if (ings.length === 0) {
+        ingredientsSectionHtml = '<p class="text-secondary text-sm" id="previewIngredientsEmpty">Chưa có dữ liệu nguyên liệu cho công thức này.</p>';
+      } else {
+        var rowsHtml = ings.map(function(ing, idx) {
+          var ingName = typeof ing === 'string' ? ing : (ing.name || ing.ingredient_name || '');
+          var ingAmount = (typeof ing === 'object' && ing.amount != null && String(ing.amount).trim() !== '') ? String(ing.amount) : '-';
+          var ingUnit = (typeof ing === 'object' && ing.unit) ? String(ing.unit) : '-';
+          var ingNote = (typeof ing === 'object' && ing.note) ? String(ing.note) : '';
+          var reqBadge = '';
+          if (typeof ing === 'object' && ing.isRequired !== undefined && ing.isRequired !== null) {
+            reqBadge = ing.isRequired
+              ? ' <span class="badge badge-primary" style="font-size:10px;padding:1px 6px;">Nguyên liệu chính</span>'
+              : ' <span class="badge" style="font-size:10px;padding:1px 6px;">Tùy chọn</span>';
+          }
+          return (
+            '<tr>' +
+              '<td><strong>' + (idx + 1) + '</strong></td>' +
+              '<td><span class="font-semibold">' + escapeHtml(ingName) + '</span>' + reqBadge + '</td>' +
+              '<td><strong>' + escapeHtml(ingAmount) + '</strong></td>' +
+              '<td>' + escapeHtml(ingUnit) + '</td>' +
+              '<td class="text-secondary">' + (ingNote ? escapeHtml(ingNote) : '-') + '</td>' +
+            '</tr>'
+          );
+        }).join('');
+        ingredientsSectionHtml =
+          '<div class="table-responsive">' +
+            '<table class="review-ing-table" id="previewIngredientsTable">' +
+              '<thead>' +
+                '<tr>' +
+                  '<th style="width:56px;">STT</th>' +
+                  '<th>Nguyên liệu</th>' +
+                  '<th style="width:120px;">Số lượng</th>' +
+                  '<th style="width:110px;">Đơn vị</th>' +
+                  '<th>Ghi chú</th>' +
+                '</tr>' +
+              '</thead>' +
+              '<tbody>' + rowsHtml + '</tbody>' +
+            '</table>' +
+          '</div>';
+      }
+
+      // Section C: Các bước chế biến
+      var steps = Array.isArray(recipe.steps) ? recipe.steps : (Array.isArray(recipe.recipe_steps) ? recipe.recipe_steps : []);
+      var stepsSectionHtml = '';
+      if (steps.length === 0) {
+        stepsSectionHtml = '<p class="text-secondary text-sm" id="previewStepsEmpty">Chưa có dữ liệu các bước chế biến.</p>';
+      } else {
+        stepsSectionHtml = '<div id="previewStepsList">' + steps.map(function(s, idx) {
+          var stepOrder = (typeof s === 'object' && s.step) ? Number(s.step) : (idx + 1);
+          var sTitle = (typeof s === 'object' && s.title && String(s.title).trim()) ? String(s.title).trim() : ('Bước ' + stepOrder);
+          var desc = typeof s === 'string' ? s : (s.description || s.instruction || '');
+          var sMins = typeof s === 'object' ? Number(s.time || s.duration || s.duration_mins || 0) : 0;
+          var sTip = typeof s === 'object' ? String(s.tip || s.tip_note || '').trim() : '';
+          var sImg = typeof s === 'object' ? String(s.image || s.image_url || '').trim() : '';
+          var stepHeading = sTitle.toLowerCase().indexOf('bước') === 0 ? sTitle : ('Bước ' + stepOrder + ': ' + sTitle);
+
+          return (
+            '<div class="review-step-card">' +
+              '<div class="review-step-num">' + stepOrder + '</div>' +
+              '<div class="flex-1">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;">' +
+                  '<strong style="font-size:0.95rem;color:#1F2937;">' + escapeHtml(stepHeading) + '</strong>' +
+                  (sMins > 0 ? '<span class="badge badge-warning text-xs"><i class="fa-regular fa-clock"></i> ' + sMins + ' phút</span>' : '') +
+                '</div>' +
+                '<p style="line-height:1.65;margin:0;font-size:0.9rem;color:#374151;">' + escapeHtml(desc) + '</p>' +
+                (sTip ? '<div style="margin-top:8px;padding:8px 12px;border-radius:8px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;font-size:0.82rem;"><strong><i class="fa-solid fa-lightbulb"></i> Mẹo nấu ăn:</strong> ' + escapeHtml(sTip) + '</div>' : '') +
+                (sImg ? '<div style="margin-top:10px;"><img src="' + escapeHtml(sImg) + '" alt="Hình minh họa bước ' + stepOrder + '" style="max-width:280px;max-height:180px;border-radius:8px;object-fit:cover;border:1px solid #E7E5E4;" onerror="this.style.display=\'none\'"></div>' : '') +
+              '</div>' +
+            '</div>'
+          );
+        }).join('') + '</div>';
+      }
+
+      // Section D: Dinh dưỡng (Calories, Protein, Carbohydrates, Fat, Fiber)
+      var nut = recipe.nutrition || {};
+      var cal = Number(nut.calories != null ? nut.calories : (recipe.calories || 0));
+      var pro = Number(nut.protein || 0);
+      var carb = Number(nut.carbs || 0);
+      var fat = Number(nut.fat || 0);
+      var fib = Number(nut.fiber || 0);
+      var hasNutrition = cal > 0 || pro > 0 || carb > 0 || fat > 0 || fib > 0;
+      var nutritionSectionHtml = '';
+      if (!hasNutrition) {
+        nutritionSectionHtml =
+          '<div class="review-nutrition-grid" id="previewNutritionGrid">' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">Chưa cập nhật</span><span class="review-nutrition-box__lbl">Calories</span></div>' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">Chưa cập nhật</span><span class="review-nutrition-box__lbl">Protein</span></div>' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">Chưa cập nhật</span><span class="review-nutrition-box__lbl">Carbohydrates</span></div>' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">Chưa cập nhật</span><span class="review-nutrition-box__lbl">Fat</span></div>' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">Chưa cập nhật</span><span class="review-nutrition-box__lbl">Fiber</span></div>' +
+          '</div>';
+      } else {
+        nutritionSectionHtml =
+          '<div class="review-nutrition-grid" id="previewNutritionGrid">' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">' + (cal > 0 ? (cal + ' kcal') : 'Chưa cập nhật') + '</span><span class="review-nutrition-box__lbl">Calories</span></div>' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">' + (pro > 0 ? (pro + ' g') : 'Chưa cập nhật') + '</span><span class="review-nutrition-box__lbl">Protein</span></div>' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">' + (carb > 0 ? (carb + ' g') : 'Chưa cập nhật') + '</span><span class="review-nutrition-box__lbl">Carbohydrates</span></div>' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">' + (fat > 0 ? (fat + ' g') : 'Chưa cập nhật') + '</span><span class="review-nutrition-box__lbl">Fat</span></div>' +
+            '<div class="review-nutrition-box"><span class="review-nutrition-box__val">' + (fib > 0 ? (fib + ' g') : 'Chưa cập nhật') + '</span><span class="review-nutrition-box__lbl">Fiber</span></div>' +
+          '</div>' +
+          '<p class="text-xs text-secondary mt-2" style="margin-bottom:0;"><i class="fa-solid fa-circle-info"></i> Lưu ý: Các chỉ số dinh dưỡng trên là giá trị ước tính trên mỗi khẩu phần.</p>';
+      }
+
+      // Section E: Nguồn công thức
+      var srcType = String(recipe.sourceType || 'USER').toUpperCase();
+      var srcTypeLabel = srcType === 'DB' ? 'CSDL Chuẩn CookMate (DB)' : (srcType === 'AI' ? 'Tổng hợp AI (AI)' : 'Người dùng đóng góp (USER)');
+      var sources = Array.isArray(recipe.sources) ? recipe.sources : [];
+      var sourcesSectionHtml =
+        '<div class="text-sm mb-2"><strong>Loại nguồn công thức:</strong> <span class="badge badge-info">' + escapeHtml(srcTypeLabel) + '</span></div>';
+      if (sources.length === 0) {
+        sourcesSectionHtml += '<p class="text-secondary text-xs" style="margin:0;">Chưa cập nhật nguồn bên ngoài trong bảng <code>recipe_sources</code>.</p>';
+      } else {
+        sourcesSectionHtml += '<ul style="margin:0;padding-left:18px;font-size:0.88rem;">' + sources.map(function(src) {
+          var sName = src.name || src.source_name || 'Nguồn tham khảo';
+          var sUrl = src.url || src.source_url || '';
+          var sKind = src.type || srcType;
+          return (
+            '<li style="margin-bottom:4px;">' +
+              '<strong>' + escapeHtml(sName) + '</strong> (' + escapeHtml(sKind) + ')' +
+              (sUrl ? ': <a href="' + escapeHtml(sUrl) + '" target="_blank" rel="noopener noreferrer" class="text-primary">' + escapeHtml(sUrl) + '</a>' : '') +
+            '</li>'
+          );
+        }).join('') + '</ul>';
+      }
+
+      container.innerHTML =
+        '<div id="previewModal">' +
+          '<!-- A. Thông tin chung -->' +
+          '<section class="review-section" id="previewSectionGeneral">' +
+            '<h4 class="review-section__title"><i class="fa-solid fa-circle-info"></i> A. Thông tin chung</h4>' +
+            '<div style="display:grid;grid-template-columns:260px 1fr;gap:22px;align-items:start;" class="mb-4">' +
+              '<img src="' + escapeHtml(imgUrl) + '" alt="' + escapeHtml(recipe.title || '') + '" style="width:100%;height:190px;border-radius:14px;object-fit:cover;border:1px solid #E7E5E4;" onerror="handleImageError(this)">' +
+              '<div>' +
+                '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' +
+                  '<h2 style="font-size:1.35rem;font-weight:800;margin:0;color:#1F2937;">' + escapeHtml(recipe.title || recipe.name || '') + '</h2>' +
+                  statusBadgeHtml +
+                '</div>' +
+                '<p style="font-size:0.92rem;color:#4B5563;line-height:1.65;margin:0;">' + escapeHtml(recipe.description || 'Chưa có mô tả chi tiết.') + '</p>' +
+              '</div>' +
+            '</div>' +
+            '<div class="review-meta-grid">' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Người đăng</span><span class="review-meta-item__value">' + escapeHtml(authorName) + '</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Email người đăng</span><span class="review-meta-item__value">' + escapeHtml(authorEmail) + '</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Danh mục</span><span class="review-meta-item__value">' + escapeHtml(catName) + '</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Ẩm thực / Vùng miền</span><span class="review-meta-item__value">' + escapeHtml(cuisine) + '</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Số khẩu phần</span><span class="review-meta-item__value">' + servings + ' người</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Độ khó</span><span class="review-meta-item__value">' + escapeHtml(difficulty) + '</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Thời gian chuẩn bị</span><span class="review-meta-item__value">' + prepTime + ' phút</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Thời gian nấu</span><span class="review-meta-item__value">' + cookTime + ' phút</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Tổng thời gian</span><span class="review-meta-item__value">' + totalTime + ' phút</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Ngày và giờ gửi</span><span class="review-meta-item__value">' + escapeHtml(sentDateTime) + (sentRelative ? ' (' + escapeHtml(sentRelative) + ')' : '') + '</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Dịp sử dụng</span><span class="review-meta-item__value">' + escapeHtml(occasion) + '</span></div>' +
+              '<div class="review-meta-item"><span class="review-meta-item__label">Món ăn gốc (Dish)</span><span class="review-meta-item__value">' + escapeHtml(dishName) + '</span></div>' +
+            '</div>' +
+          '</section>' +
+
+          '<!-- B. Nguyên liệu -->' +
+          '<section class="review-section" id="previewSectionIngredients">' +
+            '<h4 class="review-section__title"><i class="fa-solid fa-basket-shopping"></i> B. Nguyên liệu (' + ings.length + ')</h4>' +
+            ingredientsSectionHtml +
+          '</section>' +
+
+          '<!-- C. Các bước chế biến -->' +
+          '<section class="review-section" id="previewSectionSteps">' +
+            '<h4 class="review-section__title"><i class="fa-solid fa-list-ol"></i> C. Các bước chế biến (' + steps.length + ' bước)</h4>' +
+            stepsSectionHtml +
+          '</section>' +
+
+          '<!-- D. Dinh dưỡng -->' +
+          '<section class="review-section" id="previewSectionNutrition">' +
+            '<h4 class="review-section__title"><i class="fa-solid fa-fire-flame-curved"></i> D. Dinh dưỡng</h4>' +
+            nutritionSectionHtml +
+          '</section>' +
+
+          '<!-- E. Nguồn công thức -->' +
+          '<section class="review-section" id="previewSectionSources">' +
+            '<h4 class="review-section__title"><i class="fa-solid fa-link"></i> E. Nguồn công thức</h4>' +
+            sourcesSectionHtml +
+          '</section>' +
+
+          '<!-- Khu vực hành động cuối trang chi tiết -->' +
+          '<div class="admin-card p-5 mt-4 mb-10" id="reviewActionFooter" style="border: 1.5px solid #FED7AA; background: #FFFDF9;">' +
+            '<div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">' +
+              '<a href="approve-recipes.html" class="btn btn-secondary" id="backToQueueBtn">' +
+                '<i class="fa-solid fa-arrow-left"></i> Quay lại hàng đợi' +
+              '</a>' +
+              '<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
+                '<button type="button" class="btn btn-danger" id="previewRejectBtn" onclick="openRejectModal()">' +
+                  '<i class="fa-solid fa-xmark"></i> Từ chối công thức' +
+                '</button>' +
+                '<button type="button" class="btn btn-success" id="previewApproveBtn" onclick="handleApproveRecipe()">' +
+                  '<i class="fa-solid fa-check"></i> Duyệt và xuất bản' +
+                '</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    window.handleApproveRecipe = function() {
+      if (!currentReviewRecipe) return;
+      var recTitle = currentReviewRecipe.title || currentReviewRecipe.name || ('#' + currentReviewRecipe.id);
+
+      var doApprove = function() {
+        var btn = document.getElementById('previewApproveBtn');
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang duyệt...';
+        }
+        CookMateStorage.approveRecipe(currentReviewRecipe.id).then(function(res) {
+          var finalTitle = (res && res.title) || recTitle;
+          try {
+            sessionStorage.setItem('cookmate_flash_toast', 'Đã duyệt và xuất bản công thức "' + finalTitle + '" thành công!');
+          } catch (e) {}
+          if (typeof CookMateUI !== 'undefined') {
+            CookMateUI.showToast('Đã duyệt và xuất bản công thức "' + finalTitle + '" thành công!', 'success');
+          }
+          setTimeout(function() {
+            window.location.href = 'approve-recipes.html';
+          }, 300);
+        }).catch(function(error) {
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Duyệt và xuất bản';
+          }
+          if (typeof CookMateUI !== 'undefined') {
+            CookMateUI.showToast(error.message || 'Không thể duyệt công thức.', 'error');
+          }
+        });
+      };
+
+      if (typeof CookMateUI !== 'undefined' && typeof CookMateUI.showConfirm === 'function') {
+        CookMateUI.showConfirm(
+          'Bạn có chắc chắn muốn duyệt và xuất bản công thức "' + recTitle + '" lên CookMate không?',
+          doApprove
+        );
+      } else {
+        doApprove();
+      }
+    };
+
+    window.openRejectModal = function() {
+      if (!currentReviewRecipe) return;
+      var textEl = document.getElementById('rejectionReasonText');
+      var errEl = document.getElementById('rejectionError');
+      if (textEl) textEl.value = '';
+      if (errEl) errEl.style.display = 'none';
+      var rejectModal = document.getElementById('rejectModal');
+      if (rejectModal) {
+        rejectModal.classList.add('is-open');
+        rejectModal.style.display = 'flex';
+      }
+    };
+
+    window.closeRejectModal = function() {
+      var rejectModal = document.getElementById('rejectModal');
+      if (rejectModal) {
+        rejectModal.classList.remove('is-open');
+        rejectModal.style.display = 'none';
+      }
+    };
+
+    window.setQuickReason = function(reason) {
+      var textEl = document.getElementById('rejectionReasonText');
+      if (textEl) textEl.value = reason;
+      var errEl = document.getElementById('rejectionError');
+      if (errEl) errEl.style.display = 'none';
+    };
+
+    document.getElementById('confirmRejectBtn').addEventListener('click', function() {
+      if (!currentReviewRecipe) return;
+      var textEl = document.getElementById('rejectionReasonText');
+      var errEl = document.getElementById('rejectionError');
+      var reason = textEl ? textEl.value.trim() : '';
+
+      if (!reason) {
+        if (errEl) errEl.style.display = 'block';
+        return;
+      }
+
+      var confirmBtn = document.getElementById('confirmRejectBtn');
+      if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+      }
+
+      CookMateStorage.rejectRecipe(currentReviewRecipe.id, reason).then(function(res) {
+        var finalTitle = (res && res.title) || currentReviewRecipe.title || '';
+        try {
+          sessionStorage.setItem('cookmate_flash_toast', 'Đã từ chối công thức "' + finalTitle + '".');
+        } catch (e) {}
+        if (typeof CookMateUI !== 'undefined') {
+          CookMateUI.showToast('Đã từ chối công thức "' + finalTitle + '".', 'warning');
+        }
+        closeRejectModal();
+        setTimeout(function() {
+          window.location.href = 'approve-recipes.html';
+        }, 300);
+      }).catch(function(error) {
+        if (confirmBtn) {
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = '<i class="fa-solid fa-ban"></i> Xác nhận từ chối';
+        }
+        if (typeof CookMateUI !== 'undefined') {
+          CookMateUI.showToast(error.message || 'Không thể từ chối công thức.', 'error');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

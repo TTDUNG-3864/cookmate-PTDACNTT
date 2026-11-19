@@ -345,6 +345,10 @@ var Navigation = {
             '<i class="fa-solid fa-chevron-down"></i>' +
           '</button>' +
           '<div class="user-menu__dropdown" id="userDropdown">' +
+            '<div class="user-menu__user-info">' +
+              '<span class="user-menu__user-name">' + escapeHtml(user.name) + '</span>' +
+              (user.email ? '<span class="user-menu__user-email">' + escapeHtml(user.email) + '</span>' : '') +
+            '</div>' +
             '<a href="' + base + 'pages/account/profile.html" class="user-menu__item">' +
               '<i class="fa-solid fa-user"></i> Hồ sơ cá nhân</a>' +
             '<a href="' + base + 'pages/account/my-recipes.html" class="user-menu__item">' +
@@ -353,6 +357,8 @@ var Navigation = {
               '<i class="fa-solid fa-heart"></i> Yêu thích</a>' +
             '<a href="' + base + 'pages/account/recipe-form.html" class="user-menu__item">' +
               '<i class="fa-solid fa-plus"></i> Đăng công thức</a>' +
+            '<button type="button" class="user-menu__item" id="userMenuChangePasswordBtn" onclick="Navigation.openChangePasswordModal(event)">' +
+              '<i class="fa-solid fa-lock"></i> Đổi mật khẩu</button>' +
             (user.role === 'admin'
               ? '<hr class="user-menu__divider">' +
                 '<a href="' + base + 'pages/admin/index.html" class="user-menu__item user-menu__item--admin">' +
@@ -370,6 +376,7 @@ var Navigation = {
           '<div class="mobile-user-avatar">' + (user.name ? user.name.charAt(0).toUpperCase() : 'U') + '</div>' +
           '<div class="mobile-user-info">' +
             '<strong class="mobile-user-name">' + escapeHtml(user.name) + '</strong>' +
+            (user.email ? '<span class="mobile-user-role">' + escapeHtml(user.email) + '</span>' : '') +
             '<span class="mobile-user-role">' + (user.role === 'admin' ? '<i class="fa-solid fa-shield-halved"></i> Quản trị viên' : '<i class="fa-solid fa-user"></i> Thành viên') + '</span>' +
           '</div>' +
         '</div>' +
@@ -382,6 +389,8 @@ var Navigation = {
             '<i class="fa-solid fa-book"></i> <span>Công thức của tôi</span></a>' +
           '<a href="' + base + 'pages/account/recipe-form.html" class="mobile-nav__link" data-page="recipe-form">' +
             '<i class="fa-solid fa-circle-plus"></i> <span>Đăng công thức mới</span></a>' +
+          '<button type="button" class="mobile-nav__link" id="mobileChangePasswordBtn" onclick="Navigation.openChangePasswordModal(event)">' +
+            '<i class="fa-solid fa-lock"></i> <span>Đổi mật khẩu</span></button>' +
           (user.role === 'admin'
             ? '<a href="' + base + 'pages/admin/index.html" class="mobile-nav__link mobile-nav__link--admin" data-page="admin">' +
                 '<i class="fa-solid fa-gear"></i> <span>Trang Quản trị</span></a>'
@@ -481,6 +490,181 @@ var Navigation = {
   },
 
   // ---------------------------------------------------------------
+  // Change Password Modal (Opened from Desktop Avatar Dropdown & Mobile Drawer)
+  // ---------------------------------------------------------------
+  openChangePasswordModal: function (e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    var dropdown = document.getElementById('userDropdown');
+    if (dropdown) dropdown.classList.remove('is-open');
+
+    var mobileNav = document.getElementById('mobileNav');
+    var mobileOverlay = document.getElementById('mobileNavOverlay');
+    var menuToggle = document.getElementById('menuToggle');
+    if (mobileNav && mobileNav.classList.contains('is-open')) {
+      mobileNav.classList.remove('is-open', 'active');
+      if (mobileOverlay) mobileOverlay.classList.remove('is-visible', 'active');
+      if (menuToggle) menuToggle.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+    }
+
+    if (typeof CookMateUI === 'undefined' || typeof CookMateUI.showModal !== 'function') return;
+
+    var formHtml = '' +
+      '<form id="changePasswordForm" class="cp-form" novalidate>' +
+        '<div class="cp-field">' +
+          '<label for="cpCurrentPassword" class="cp-label">Mật khẩu hiện tại</label>' +
+          '<div class="cp-input-wrap">' +
+            '<input type="password" id="cpCurrentPassword" class="form-input cp-input" placeholder="Nhập mật khẩu hiện tại" autocomplete="current-password" required>' +
+            '<button type="button" class="cp-toggle-btn" data-target="cpCurrentPassword" aria-label="Hiện mật khẩu">' +
+              '<i class="fa-regular fa-eye"></i>' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="cp-field">' +
+          '<label for="cpNewPassword" class="cp-label">Mật khẩu mới</label>' +
+          '<div class="cp-input-wrap">' +
+            '<input type="password" id="cpNewPassword" class="form-input cp-input" placeholder="Tối thiểu 8 ký tự" autocomplete="new-password" required>' +
+            '<button type="button" class="cp-toggle-btn" data-target="cpNewPassword" aria-label="Hiện mật khẩu">' +
+              '<i class="fa-regular fa-eye"></i>' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="cp-field">' +
+          '<label for="cpConfirmPassword" class="cp-label">Xác nhận mật khẩu mới</label>' +
+          '<div class="cp-input-wrap">' +
+            '<input type="password" id="cpConfirmPassword" class="form-input cp-input" placeholder="Nhập lại mật khẩu mới" autocomplete="new-password" required>' +
+            '<button type="button" class="cp-toggle-btn" data-target="cpConfirmPassword" aria-label="Hiện mật khẩu">' +
+              '<i class="fa-regular fa-eye"></i>' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="auth-error-msg form-error cp-error-box" id="changePasswordError" role="alert"></div>' +
+      '</form>';
+
+    var footerHtml = '' +
+      '<button type="button" class="btn btn-secondary" id="cpCancelBtn">Hủy</button>' +
+      '<button type="submit" form="changePasswordForm" class="btn btn-primary" id="cpSubmitBtn">Cập nhật mật khẩu</button>';
+
+    var modalRef = CookMateUI.showModal({
+      title: 'Đổi mật khẩu',
+      subtitle: 'Bảo vệ tài khoản bằng mật khẩu mới.',
+      content: formHtml,
+      footer: footerHtml,
+      size: 'medium'
+    });
+
+    var modalEl = modalRef.modal;
+    var form = modalEl.querySelector('#changePasswordForm');
+    var curInput = modalEl.querySelector('#cpCurrentPassword');
+    var newInput = modalEl.querySelector('#cpNewPassword');
+    var confInput = modalEl.querySelector('#cpConfirmPassword');
+    var errBox = modalEl.querySelector('#changePasswordError');
+    var cancelBtn = modalEl.querySelector('#cpCancelBtn');
+    var submitBtn = modalEl.querySelector('#cpSubmitBtn');
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        modalRef.close();
+      });
+    }
+
+    modalEl.querySelectorAll('.cp-toggle-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var targetId = btn.getAttribute('data-target');
+        var targetInput = targetId ? modalEl.querySelector('#' + targetId) : btn.parentElement.querySelector('input');
+        if (!targetInput) return;
+        var isMasked = targetInput.type === 'password';
+        targetInput.type = isMasked ? 'text' : 'password';
+        var icon = btn.querySelector('i');
+        if (icon) {
+          icon.className = isMasked ? 'fa-regular fa-eye-slash' : 'fa-regular fa-eye';
+        }
+        btn.setAttribute('aria-label', isMasked ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+      });
+    });
+
+    function clearErrors() {
+      [curInput, newInput, confInput].forEach(function (inp) {
+        if (inp) inp.classList.remove('input-error');
+      });
+      if (errBox) {
+        errBox.textContent = '';
+        errBox.classList.remove('is-visible');
+        errBox.style.display = 'none';
+      }
+    }
+
+    function showError(msg, badInput) {
+      if (badInput) badInput.classList.add('input-error');
+      if (errBox) {
+        errBox.textContent = msg;
+        errBox.classList.add('is-visible');
+        errBox.style.display = 'block';
+      }
+    }
+
+    if (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        clearErrors();
+
+        var curVal = curInput ? curInput.value : '';
+        var newVal = newInput ? newInput.value : '';
+        var confVal = confInput ? confInput.value : '';
+
+        if (!curVal || !curVal.trim()) {
+          showError('Vui lòng nhập mật khẩu hiện tại.', curInput);
+          return;
+        }
+        if (!newVal || !newVal.trim()) {
+          showError('Vui lòng nhập mật khẩu mới.', newInput);
+          return;
+        }
+        if (!confVal || !confVal.trim()) {
+          showError('Vui lòng xác nhận mật khẩu mới.', confInput);
+          return;
+        }
+        if (newVal.length < 8) {
+          showError('Mật khẩu mới phải có ít nhất 8 ký tự.', newInput);
+          return;
+        }
+        if (newVal !== confVal) {
+          showError('Mật khẩu xác nhận không khớp.', confInput);
+          return;
+        }
+        if (newVal === curVal) {
+          showError('Mật khẩu mới phải khác mật khẩu hiện tại.', newInput);
+          return;
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang cập nhật...</span>';
+        }
+
+        CookMateStorage.changePassword(curVal, newVal, confVal).then(function () {
+          modalRef.close();
+          CookMateUI.showToast('Đổi mật khẩu thành công!', 'success');
+        }).catch(function (err) {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Cập nhật mật khẩu';
+          }
+          var msg = (err && err.message) || 'Không thể đổi mật khẩu. Vui lòng thử lại.';
+          showError(msg, /hiện tại/i.test(msg) ? curInput : newInput);
+          CookMateUI.showToast(msg, 'error');
+        });
+      });
+    }
+  },
+
+  // ---------------------------------------------------------------
   // Header search
   // ---------------------------------------------------------------
   setupHeaderSearch: function () {
@@ -507,8 +691,6 @@ function handleLogout() {
     // TUYỆT ĐỐI không làm mất phiên Admin Shell bên ngoài
     if (typeof CookMateStorage !== 'undefined') {
       CookMateStorage.remove(CookMateStorage.KEYS.USER);
-    } else {
-      localStorage.removeItem('cookmate_current_user');
     }
     if (typeof CookMateUI !== 'undefined') {
       CookMateUI.showToast('Đã đăng xuất khỏi phiên xem website', 'info');
@@ -520,15 +702,7 @@ function handleLogout() {
   }
 
   // Đăng xuất từ cửa sổ chính: xóa toàn bộ session
-  if (typeof CookMateStorage !== 'undefined') {
-    CookMateStorage.clearCurrentUser();
-    if (CookMateStorage.clearAdminSession) {
-      CookMateStorage.clearAdminSession();
-    }
-  } else {
-    localStorage.removeItem('cookmate_current_user');
-    localStorage.removeItem('cookmate_admin_session');
-  }
+  var logoutPromise=typeof CookMateStorage!=='undefined'?CookMateStorage.logout():Promise.resolve();
 
   try {
     sessionStorage.removeItem('cookmate_sidebar_closed');
@@ -538,7 +712,7 @@ function handleLogout() {
   if (typeof CookMateUI !== 'undefined') {
     CookMateUI.showToast('Đã đăng xuất thành công', 'success');
   }
-  setTimeout(function () {
+  Promise.resolve(logoutPromise).catch(function(){}).finally(function(){
     window.location.href = getBasePath() + 'index.html';
-  }, 400);
+  });
 }

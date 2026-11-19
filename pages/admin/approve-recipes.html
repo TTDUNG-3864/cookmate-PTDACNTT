@@ -45,7 +45,6 @@
       </div>
 
       <nav class="admin-sidebar__nav">
-        <!-- Nút Xem website CookMate ở đầu Sidebar -->
         <div class="admin-sidebar__top-action">
           <a href="../../index.html" class="admin-sidebar__link admin-sidebar__link--website" id="btnViewWebsite" data-tooltip="Xem website CookMate" title="Xem website CookMate">
             <i class="fa-solid fa-globe"></i>
@@ -150,7 +149,7 @@
           <div>
             <h2 class="admin-content__title">Công thức chờ phê duyệt</h2>
             <p class="admin-content__subtitle">
-              Xem xét nội dung, kiểm tra định lượng nguyên liệu và chất lượng hình ảnh trước khi cho phép xuất bản công khai.
+              Nhấn "Xem chi tiết" để kiểm tra toàn bộ nội dung, định lượng nguyên liệu và các bước chế biến trước khi phê duyệt.
             </p>
           </div>
           <div class="badge badge-warning" style="font-size: 14px; padding: 6px 14px;">
@@ -187,66 +186,6 @@
 
   </div>
 
-  <!-- Detail Preview Modal -->
-  <div class="modal-overlay" id="previewModal" style="display: none;">
-    <div class="modal" style="max-width: 720px; max-height: 90vh; display: flex; flex-direction: column;">
-      <div class="modal-header">
-        <h3 class="modal-title" id="previewModalTitle"><i class="fa-solid fa-eye text-primary"></i> Xem trước công thức</h3>
-        <button class="modal-close" onclick="closePreviewModal()" aria-label="Đóng">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      <div class="modal-body" id="previewModalBody" style="overflow-y: auto; padding: 20px;">
-        <!-- Populated by JS -->
-      </div>
-      <div class="modal-footer" id="previewModalFooter">
-        <button class="btn btn-outline" onclick="closePreviewModal()">Đóng</button>
-        <button class="btn btn-danger" id="previewRejectBtn">
-          <i class="fa-solid fa-xmark"></i> Từ chối
-        </button>
-        <button class="btn btn-success" id="previewApproveBtn">
-          <i class="fa-solid fa-check"></i> Duyệt & Xuất bản
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Reject Reason Modal -->
-  <div class="modal-overlay" id="rejectModal" style="display: none;">
-    <div class="modal" style="max-width: 500px;">
-      <div class="modal-header">
-        <h3 class="modal-title"><i class="fa-solid fa-triangle-exclamation text-danger"></i> Từ chối công thức</h3>
-        <button class="modal-close" onclick="closeRejectModal()" aria-label="Đóng">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      <div class="modal-body">
-        <p class="mb-3 text-sm">Vui lòng nêu rõ lý do để tác giả biết và chỉnh sửa lại nội dung:</p>
-        
-        <div class="mb-3">
-          <label class="form-label text-xs font-bold text-secondary mb-1">Gợi ý lý do nhanh:</label>
-          <div class="flex flex-wrap gap-2">
-            <button type="button" class="btn btn-xs btn-ghost border" onclick="setQuickReason('Định lượng nguyên liệu chưa rõ ràng hoặc thiếu đơn vị (gam, ml).')">Thiếu định lượng</button>
-            <button type="button" class="btn btn-xs btn-ghost border" onclick="setQuickReason('Hình ảnh món ăn mờ hoặc không đúng với món ăn.')">Ảnh chưa chuẩn</button>
-            <button type="button" class="btn btn-xs btn-ghost border" onclick="setQuickReason('Các bước chế biến quá sơ sài, thiếu hướng dẫn cụ thể.')">Bước nấu sơ sài</button>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="rejectionReasonText" class="form-label">Lý do từ chối <span class="required">*</span></label>
-          <textarea id="rejectionReasonText" class="form-input form-textarea" rows="4" placeholder="Nhập lý do chi tiết gửi đến người đăng..."></textarea>
-          <div class="form-error" id="rejectionError" style="display:none; color:#DC2626; font-size:12px; margin-top:4px;">Vui lòng nhập lý do từ chối.</div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" onclick="closeRejectModal()">Hủy</button>
-        <button class="btn btn-danger" id="confirmRejectBtn">
-          <i class="fa-solid fa-ban"></i> Xác nhận từ chối
-        </button>
-      </div>
-    </div>
-  </div>
-
   <div id="toastContainer" class="toast-container"></div>
 
   <script src="../../assets/js/utils.js"></script>
@@ -261,13 +200,8 @@
   <script src="../../assets/js/admin-shell.js"></script>
 
   <script>
-    var currentRecipeActionId = null;
-
     document.addEventListener('DOMContentLoaded', function() {
-      // 1. Guard access
       if (!checkAdminAuth()) return;
-
-      setupSidebar();
       renderPendingList();
     });
 
@@ -290,12 +224,11 @@
       return true;
     }
 
-    function setupSidebar() {
-      // Quản lý đồng bộ bởi AdminShell (assets/js/admin-shell.js)
-    }
-
     function renderPendingList() {
-      var pending = CookMateStorage.getPendingRecipes ? CookMateStorage.getPendingRecipes() : [];
+      var rawPending = CookMateStorage.getPendingRecipes ? CookMateStorage.getPendingRecipes() : [];
+      var pending = rawPending.filter(function(r) {
+        return !r.status || String(r.status).toLowerCase() === 'pending';
+      });
       var tbody = document.getElementById('pendingRecipesTable');
       var badge = document.getElementById('pendingCountBadge');
       var sideBadge = document.getElementById('sidebarPendingBadge');
@@ -329,14 +262,19 @@
 
       tbody.innerHTML = pending.map(function(r) {
         var cat = categories.find(function(c) { return c.id === r.categoryId || c.id == r.categoryId; });
-        var catName = cat ? cat.name : (r.category || 'Món ăn');
-        var authorName = r.authorName || 'Thành viên CookMate';
-        var timeDisplay = typeof timeAgo === 'function' ? timeAgo(r.createdAt) : (r.createdAt || 'Mới gửi');
+        var catName = r.categoryName || (cat ? cat.name : (r.category || 'Món ăn'));
+        var authorName = r.authorName || (r.author && r.author.name) || 'Thành viên CookMate';
+        var ts = r.createdAt || r.created_at || '';
+        var timeDisplay = typeof timeAgo === 'function' ? timeAgo(ts) : (ts || 'Vừa xong');
+        var exactTime = typeof formatDateTimeVN === 'function' ? formatDateTimeVN(ts) : '';
+        var imgSrc = typeof getImageUrl === 'function'
+          ? getImageUrl(r.image || r.imageUrl, '../../assets/images/placeholders/recipe-placeholder.svg')
+          : (r.image || r.imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg');
 
         return `
-          <tr>
+          <tr id="pending-recipe-row-${r.id}">
             <td>
-              <img src="${r.image || r.imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg'}" alt="" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover;" onerror="handleImageError(this)">
+              <img src="${escapeHtml(imgSrc)}" alt="" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover;" onerror="handleImageError(this)">
             </td>
             <td>
               <div class="font-bold text-sm text-primary">${escapeHtml(r.title || r.name)}</div>
@@ -349,161 +287,20 @@
               <span class="badge badge-info text-xs">${escapeHtml(catName)}</span>
             </td>
             <td class="text-xs text-secondary">
-              ${timeDisplay}
+              <div class="font-medium text-primary" data-relative-time="${escapeHtml(ts)}">${escapeHtml(timeDisplay)}</div>
+              ${exactTime ? '<div class="text-[11px] text-secondary">' + escapeHtml(exactTime) + '</div>' : ''}
             </td>
             <td class="text-right">
               <div class="flex items-center justify-end gap-2">
-                <button class="btn btn-sm btn-ghost border" onclick="openPreviewModal('${r.id}')" title="Xem chi tiết công thức">
-                  <i class="fa-solid fa-eye"></i> Xem
-                </button>
-                <button class="btn btn-sm btn-success" onclick="approveRecipeDirect('${r.id}')" title="Duyệt và xuất bản ngay">
-                  <i class="fa-solid fa-check"></i> Duyệt
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="openRejectModal('${r.id}')" title="Từ chối công thức">
-                  <i class="fa-solid fa-xmark"></i> Từ chối
-                </button>
+                <a href="review-recipe.html?id=${encodeURIComponent(r.id)}" class="btn btn-sm btn-primary btn-view-detail" title="Xem chi tiết công thức">
+                  <i class="fa-solid fa-eye"></i> Xem chi tiết
+                </a>
               </div>
             </td>
           </tr>
         `;
       }).join('');
     }
-
-    // Direct approve
-    window.approveRecipeDirect = function(id) {
-      var currentUser = CookMateStorage.getCurrentUser();
-      var res = CookMateStorage.approveRecipe(id, currentUser);
-      if (res) {
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Đã duyệt và xuất bản công thức "' + res.title + '" thành công!', 'success');
-        }
-        renderPendingList();
-      }
-    };
-
-    // Open detail preview modal
-    window.openPreviewModal = function(id) {
-      currentRecipeActionId = id;
-      var recipe = CookMateStorage.getRecipeById(id, true);
-      if (!recipe) return;
-
-      var categories = CookMateStorage.getAllCategories();
-      var cat = categories.find(function(c) { return c.id === recipe.categoryId || c.id == recipe.categoryId; });
-      var catName = cat ? cat.name : (recipe.category || 'Món ăn');
-
-      var modal = document.getElementById('previewModal');
-      var titleEl = document.getElementById('previewModalTitle');
-      var body = document.getElementById('previewModalBody');
-
-      titleEl.innerHTML = `<i class="fa-solid fa-eye text-primary"></i> ${escapeHtml(recipe.title || recipe.name)}`;
-
-      var ingredientsHtml = (recipe.ingredients || []).map(function(ing) {
-        var name = typeof ing === 'string' ? ing : ing.name;
-        var amt = typeof ing === 'object' ? `${ing.amount || ''} ${ing.unit || ''}` : '';
-        return `<li class="flex-between py-1 border-b border-light text-sm"><span>${escapeHtml(name)}</span><strong>${escapeHtml(amt)}</strong></li>`;
-      }).join('');
-
-      var stepsHtml = (recipe.steps || []).map(function(s, idx) {
-        var desc = typeof s === 'string' ? s : s.description;
-        return `
-          <div class="mb-3 flex gap-3 text-sm">
-            <span class="badge badge-primary" style="height: 24px; min-width: 24px; padding:0; display:flex; align-items:center; justify-content:center; border-radius:50%;">${idx + 1}</span>
-            <p class="flex-1">${escapeHtml(desc)}</p>
-          </div>
-        `;
-      }).join('');
-
-      body.innerHTML = `
-        <div class="grid grid-2 gap-4 mb-4">
-          <img src="${recipe.image || recipe.imageUrl || '../../assets/images/placeholders/recipe-placeholder.svg'}" alt="" style="width: 100%; height: 200px; border-radius: 12px; object-fit: cover;" onerror="handleImageError(this)">
-          <div>
-            <div class="badge badge-info text-xs mb-2">${escapeHtml(catName)}</div>
-            <p class="text-sm text-secondary mb-3">${escapeHtml(recipe.description || 'Không có mô tả')}</p>
-            <div class="text-xs text-secondary space-y-1">
-              <div><strong>Tác giả:</strong> ${escapeHtml(recipe.authorName || 'Thành viên')}</div>
-              <div><strong>Khẩu phần:</strong> ${recipe.servings || 4} người</div>
-              <div><strong>Độ khó:</strong> ${escapeHtml(recipe.difficulty || 'Trung bình')}</div>
-              <div><strong>Thời gian:</strong> Chuẩn bị ${recipe.prepTime || 0}p • Nấu ${recipe.cookTime || 0}p</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="mb-4">
-          <h4 class="font-bold text-sm mb-2 text-primary"><i class="fa-solid fa-basket-shopping mr-1"></i> Định lượng nguyên liệu:</h4>
-          <ul class="rounded bg-card p-3 border border-light">
-            ${ingredientsHtml || '<li class="text-secondary text-sm">Chưa có danh sách nguyên liệu</li>'}
-          </ul>
-        </div>
-
-        <div>
-          <h4 class="font-bold text-sm mb-2 text-primary"><i class="fa-solid fa-list-ol mr-1"></i> Các bước chế biến:</h4>
-          <div class="rounded bg-card p-3 border border-light">
-            ${stepsHtml || '<p class="text-secondary text-sm">Chưa có hướng dẫn các bước</p>'}
-          </div>
-        </div>
-      `;
-
-      // Wire preview action buttons
-      document.getElementById('previewApproveBtn').onclick = function() {
-        approveRecipeDirect(recipe.id);
-        closePreviewModal();
-      };
-      document.getElementById('previewRejectBtn').onclick = function() {
-        closePreviewModal();
-        openRejectModal(recipe.id);
-      };
-
-      modal.style.display = 'flex';
-    };
-
-    window.closePreviewModal = function() {
-      document.getElementById('previewModal').style.display = 'none';
-    };
-
-    // Open reject modal
-    window.openRejectModal = function(id) {
-      currentRecipeActionId = id;
-      var textEl = document.getElementById('rejectionReasonText');
-      var errEl = document.getElementById('rejectionError');
-      if (textEl) textEl.value = '';
-      if (errEl) errEl.style.display = 'none';
-      document.getElementById('rejectModal').style.display = 'flex';
-    };
-
-    window.closeRejectModal = function() {
-      document.getElementById('rejectModal').style.display = 'none';
-      currentRecipeActionId = null;
-    };
-
-    window.setQuickReason = function(reason) {
-      var textEl = document.getElementById('rejectionReasonText');
-      if (textEl) textEl.value = reason;
-      var errEl = document.getElementById('rejectionError');
-      if (errEl) errEl.style.display = 'none';
-    };
-
-    document.getElementById('confirmRejectBtn').addEventListener('click', function() {
-      var textEl = document.getElementById('rejectionReasonText');
-      var errEl = document.getElementById('rejectionError');
-      var reason = textEl ? textEl.value.trim() : '';
-
-      if (!reason) {
-        if (errEl) errEl.style.display = 'block';
-        return;
-      }
-
-      var currentUser = CookMateStorage.getCurrentUser();
-      var res = CookMateStorage.rejectRecipe(currentRecipeActionId, reason, currentUser);
-
-      if (res) {
-        if (typeof CookMateUI !== 'undefined') {
-          CookMateUI.showToast('Đã từ chối công thức "' + res.title + '" và lưu lý do gửi cho tác giả.', 'warning');
-        }
-        closeRejectModal();
-        renderPendingList();
-      }
-    });
-
   </script>
 </body>
 </html>
